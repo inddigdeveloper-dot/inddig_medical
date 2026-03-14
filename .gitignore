@@ -1,0 +1,9 @@
+# Ignore python cache and database
+__pycache__/
+*.db
+*.pyc
+
+# Ignore Google Auth and Secrets in the subfolder
+doctor-appointment-system/src/credentials.json
+doctor-appointment-system/src/token.json
+doctor-appointment-system/src/.env

@@ -1,0 +1,16 @@
+services:
+  backend:
+    build: ./doctor-appointment-system/src
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./doctor-appointment-system/src/appointments.db:/app/appointments.db
+    environment:
+      - ENV_FILE=.env
+
+  frontend:
+    build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
