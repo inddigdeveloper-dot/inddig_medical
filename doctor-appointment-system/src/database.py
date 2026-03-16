@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine,Integer, Date, Time, Column, String, Boolean, DateTime, BOOLEAN
+from sqlalchemy import ForeignKey, create_engine,Integer, Date, Time, Column, String, Boolean, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker,relationship,Session
 from datetime import datetime, UTC
 
 # now = datetime.now(UTC)
@@ -13,10 +13,21 @@ SessionLocal = sessionmaker(autoflush=False,
                             bind = engine )
 
 Base = declarative_base()
+class Doctor(Base):
+    __tablename__="doctors"
+    id = Column(Integer,primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+
+    appointments = relationship("Appointment", back_populates="doctor")
 
 class Appointment(Base):
     __tablename__="appointments"
     id = Column(Integer, primary_key = True, index=True)
+
+    doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    doctor = relationship("Doctor", back_populates="appointments")
+
 
     client_name = Column(String)
     client_email = Column(String, unique=False, index=True)
@@ -32,3 +43,9 @@ class Appointment(Base):
     calendar_event_id = Column(String, nullable=True)
     
 Base.metadata.create_all(bind=engine)
+def get_db():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
