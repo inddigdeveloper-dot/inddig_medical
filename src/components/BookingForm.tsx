@@ -170,9 +170,7 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
   };
 
   const today = new Date().toISOString().split('T')[0];
-  const previewISO = formData.slot_date && formData.slot_time && timezone
-    ? (() => { try { return buildISOWithTimezone(formData.slot_date, formData.slot_time, timezone); } catch { return ''; } })()
-    : '';
+  
 
   // ── Success screen ──
   if (formState === 'success') {
