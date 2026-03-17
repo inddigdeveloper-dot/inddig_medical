@@ -23,7 +23,7 @@ app = FastAPI(title="Doctor Appointment System")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173","https://inddig-medical.onrender.com","https://inddigdeveloper-dot.github.io/inddig_medical/"],
     allow_credentials=True,  
     allow_methods=["*"],
     allow_headers=["*"],
