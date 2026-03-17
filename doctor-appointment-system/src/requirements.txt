@@ -10,3 +10,6 @@ passlib[bcrypt<4.0.0]
 python-multipart
 python-jose
 sqlite-web
+requests
+httpx
+json

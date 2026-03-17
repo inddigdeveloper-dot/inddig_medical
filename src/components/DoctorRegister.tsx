@@ -1,0 +1,167 @@
+import { useState } from 'react';
+import { Loader2, Phone, ShieldCheck, CheckCircle } from 'lucide-react';
+
+export default function DoctorRegister({ onNavigateLogin }: { onNavigateLogin: () => void }) {
+  const [formData, setFormData] = useState({ username: '', password: '', whatsapp_no: '' });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // OTP State
+  const [otpState, setOtpState] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'verified'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+
+  const handleSendOtp = async () => {
+    if (!formData.whatsapp_no) { setOtpError('Enter mobile number'); return; }
+    setOtpState('sending'); setOtpError('');
+    try {
+      const res = await fetch(`http://localhost:8000/sendotp?phone_number=${encodeURIComponent(formData.whatsapp_no)}`, { method: 'POST' });
+      if (res.ok) setOtpState('sent');
+      else setOtpError('Failed to send OTP');
+    } catch {
+      setOtpError('Network error'); setOtpState('idle');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode) return;
+    setOtpState('verifying'); setOtpError('');
+    try {
+      const res = await fetch(`http://localhost:8000/verify_otp?phone_number=${encodeURIComponent(formData.whatsapp_no)}&otp=${encodeURIComponent(otpCode)}`);
+      if (res.ok) setOtpState('verified');
+      else { setOtpError('Invalid OTP'); setOtpState('sent'); }
+    } catch {
+      setOtpError('Network error'); setOtpState('sent');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpState !== 'verified') {
+      setError('Please verify your WhatsApp number first.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('http://localhost:8000/doctor/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+          // Your current backend DoctorCreate schema only expects username & password.
+          // The database has whatsapp_no, but the Pydantic schema doesn't yet. 
+          // If you update your backend Pydantic schema, it will capture this!
+          // whatsapp_no: formData.whatsapp_no 
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(`Registered successfully! Your custom link is: ${data.booking_link}`);
+      } else {
+        setError(data.detail || 'Registration failed');
+      }
+    } catch {
+      setError('Network error connecting to backend.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="text-green-500 mb-4 flex justify-center"><CheckCircle size={60} /></div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome, Dr. {formData.username}!</h2>
+          <p className="text-gray-600 mb-6 text-sm">{success}</p>
+          <button onClick={onNavigateLogin} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">
+            Proceed to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-4 text-center">Register Clinic</h1>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Username (No spaces)</label>
+            <input
+              type="text" required
+              value={formData.username} onChange={e => setFormData({...formData, username: e.target.value.toLowerCase().replace(/\s/g, '_')})}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+              placeholder="e.g. dr_smith"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input
+              type="password" required
+              value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+              placeholder="Choose a strong password"
+            />
+          </div>
+
+          <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="flex items-center gap-2"><Phone size={18} /> WhatsApp Number</div>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="tel" required disabled={otpState === 'verified' || otpState === 'sent'}
+                  value={formData.whatsapp_no} onChange={e => setFormData({...formData, whatsapp_no: e.target.value})}
+                  className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+                  placeholder="e.g. 919876543210"
+                />
+                
+                {otpState === 'idle' && (
+                  <button type="button" onClick={handleSendOtp} className="bg-blue-600 text-white px-4 rounded-lg font-medium">Verify</button>
+                )}
+                {otpState === 'sending' && (
+                  <button type="button" disabled className="bg-blue-400 text-white px-4 rounded-lg font-medium flex items-center gap-2"><Loader2 size={16} className="animate-spin" /></button>
+                )}
+                {otpState === 'verified' && (
+                  <div className="bg-green-100 text-green-700 px-4 rounded-lg font-medium flex items-center gap-2"><ShieldCheck size={20} /></div>
+                )}
+              </div>
+
+              {(otpState === 'sent' || otpState === 'verifying') && (
+                <div className="mt-3 flex gap-2">
+                  <input type="text" placeholder="6-digit OTP" value={otpCode} onChange={e => setOtpCode(e.target.value)} className="flex-1 px-4 py-2 rounded-lg border border-blue-300 outline-none"/>
+                  <button type="button" onClick={handleVerifyOtp} disabled={otpState === 'verifying'} className="bg-green-600 text-white px-4 rounded-lg font-medium">{otpState === 'verifying' ? '...' : 'Confirm'}</button>
+                </div>
+              )}
+              {otpError && <p className="text-red-500 text-sm mt-2">{otpError}</p>}
+          </div>
+
+          {error && <div className="text-red-600 text-sm text-center font-medium">{error}</div>}
+          
+          <button
+            type="submit"
+            disabled={isLoading || otpState !== 'verified'}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Register'}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-gray-600 border-t pt-4">
+          Already have an account?{' '}
+          <button onClick={onNavigateLogin} className="text-blue-600 hover:underline font-semibold">Login here</button>
+        </div>
+      </div>
+    </div>
+  );
+}

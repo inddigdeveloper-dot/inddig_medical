@@ -5,11 +5,13 @@ from datetime import datetime, timedelta, date, time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session                                        
 from dotenv import load_dotenv
 from fastapi.security import OAuth2PasswordRequestForm
 from googleapiclient.discovery import build 
 from google.oauth2.credentials import Credentials
+
+import requests
 
 import auth
 import database as db
@@ -249,6 +251,53 @@ async def get_approved_appointments(current_doctor: db.Doctor = Depends(auth.get
     approved_appointments = session.query(db.Appointment).filter(db.Appointment.is_approved == True, db.Appointment.doctor_id == current_doctor.id).all()
     return approved_appointments
 
+@app.post("/sendotp")
+async def send_otp(phone_number: str):
+    import random
+    otp = str(random.randint(100000, 999999))
+    url = "https://backend.aisensy.com/campaign/t1/api/v2"
+    payload = {
+        "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY3NTA1YzZkOTdiM2EyMjg3MDI5N2E3NCIsIm5hbWUiOiI0IGRlYyIsImFwcE5hbWUiOiJBaVNlbnN5IiwiY2xpZW50SWQiOiI2NzRiMDcyNzk2Y2M2YTBiMGNkODc3NjAiLCJhY3RpdmVQbGFuIjoiTk9ORSIsImlhdCI6MTczMzMxOTc4OX0.9j_hBIIrCsgf0ME9VxncjDm_DDq-nb7J0chhWuljDWs",
+        "campaignName": "medical-otp-registration",
+        "destination": phone_number,  
+        "userName": "User",
+        "templateParams": [otp],
+        "source": "new-landing-page form",
+        "media": {},
+        "buttons": [
+            {
+                "type": "button",
+                "sub_type": "url",
+                "index": 0,
+                "parameters": [{"type": "text", "text": otp}]
+            }
+        ],                                                                                                                                                                                
+        "carouselCards": [],
+        "location": {},
+        "attributes": {},
+        "paramsFallbackValue": {"FirstName": "user"}
+    }
+    headers = {"Content-Type": "application/json"}
+    try:
+        # auth.store_otp = otp
+        response = requests.post(url, json = payload, headers = headers)
+        response_data = response.json()
+        if response.status_code == 200:
+            auth.otp_storage[phone_number] = otp
+            return {"message":"OTP sent successfully","status":"successfully sent"}
+        else:
+            raise HTTPException(status_code = response.status_code, detail = response_data.get("message", "Failed to send OTP"))
+    except Exception as e:
+        raise HTTPException(status_code = 500, detail = f"Error sending OTP: {str(e)}")
+
+@app.get("/verify_otp")
+async def verify_otp(phone_number: str, otp: str):
+    stored_otp = auth.otp_storage.get(phone_number)
+
+    if otp == stored_otp:
+        return {"message": "OTP is verified successfully"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
 
 # Unified Delete Route for both Pending and Approved
 @app.delete("/doctor/delete/{appointment_id}")
@@ -269,3 +318,6 @@ async def delete_appointment(appointment_id: int, current_doctor: db.Doctor = De
     session.commit()
     
     return {"message": f"Appointment is deleted successfully for {apt.client_name}"}
+
+
+    
