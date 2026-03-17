@@ -7,3 +7,6 @@ __pycache__/
 doctor-appointment-system/src/credentials.json
 doctor-appointment-system/src/token.json
 doctor-appointment-system/src/.env
+node_modules/
+dist/
+.cache
