@@ -1,1 +1,2 @@
-export const BACKEND_URL = "https://inddig-medical.onrender.com";
+export const BACKEND_URL = "https://inddigmedical-production.up.railway.app";
+// https://inddig-medical.onrender.com
