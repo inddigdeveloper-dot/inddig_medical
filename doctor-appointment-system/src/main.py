@@ -150,7 +150,7 @@ def request_appointment(doctor_username: str, request: AppointmentRequest, sessi
         doctor_id=doctor.id,
         client_name=request.client_name,
         client_email=request.client_email,
-        client_mobile_no=request.mobile_no,
+        whatsapp_no=request.mobile_no,
         booking_date=booking_date,
         user_timezone=request.user_timezone,           
         slot_time=slot_time_obj)            # Initially None, can be updated by doctor later
