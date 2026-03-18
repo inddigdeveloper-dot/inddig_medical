@@ -10,3 +10,4 @@ doctor-appointment-system/src/.env
 node_modules/
 dist/
 .cache
+.env
