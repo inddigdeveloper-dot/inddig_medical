@@ -1,0 +1,1 @@
+export const BACKEND_URL = "https://inddig-medical.onrender.com";

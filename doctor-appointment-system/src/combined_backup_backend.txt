@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 from fastapi.security import OAuth2PasswordRequestForm
 from googleapiclient.discovery import build 
 from google.oauth2.credentials import Credentials
-import config
 
 import requests
 
@@ -24,7 +23,8 @@ app = FastAPI(title="Doctor Appointment System")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.ALLOWED_ORIGINS,
+    allow_origins=["http://localhost:5173",
+    "https://inddigdeveloper-dot.github.io"],
     allow_credentials=True,  
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,7 +117,7 @@ def register_doctor(doctor: DoctorCreate, session: Session = Depends(get_db)):
     session.refresh(new_doctor)
     # return {"message": "Doctor registered successfully."}
 
-    booking_link = f"{config.FRONTEND_BOOKING_BASE_URL}/{new_doctor.username}"
+    booking_link = f"http://inddigdeveloper-dot.github.io/inddig_medical/#/book/{new_doctor.username}"
     return {"message": "Doctor registered!", "booking_link": booking_link}
 
 @app.post("/doctor/login")
@@ -256,7 +256,7 @@ async def get_approved_appointments(current_doctor: db.Doctor = Depends(auth.get
 async def send_otp(phone_number: str):
     import random
     otp = str(random.randint(100000, 999999))
-    url = config.AISENSY_API_URL
+    url = "https://backend.aisensy.com/campaign/t1/api/v2"
     payload = {
         "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY3NTA1YzZkOTdiM2EyMjg3MDI5N2E3NCIsIm5hbWUiOiI0IGRlYyIsImFwcE5hbWUiOiJBaVNlbnN5IiwiY2xpZW50SWQiOiI2NzRiMDcyNzk2Y2M2YTBiMGNkODc3NjAiLCJhY3RpdmVQbGFuIjoiTk9ORSIsImlhdCI6MTczMzMxOTc4OX0.9j_hBIIrCsgf0ME9VxncjDm_DDq-nb7J0chhWuljDWs",
         "campaignName": "medical-otp-registration",

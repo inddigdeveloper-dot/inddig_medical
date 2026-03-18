@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, Mail, Phone, User, Loader2, MapPin, CheckCircle, ShieldCheck } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
 type GeoState = 'pending' | 'detecting' | 'granted' | 'denied';
@@ -87,7 +88,7 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     setOtpState('sending');
     setOtpError('');
     try {
-      const res = await fetch(`http://localhost:8000/sendotp?phone_number=${encodeURIComponent(formData.mobile_no)}`, {
+      const res = await fetch(`${BACKEND_URL}/sendotp?phone_number=${encodeURIComponent(formData.mobile_no)}`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -108,7 +109,7 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     setOtpState('verifying');
     setOtpError('');
     try {
-      const res = await fetch(`http://localhost:8000/verify_otp?phone_number=${encodeURIComponent(formData.mobile_no)}&otp=${encodeURIComponent(otpCode)}`);
+      const res = await fetch(`${BACKEND_URL}/verify_otp?phone_number=${encodeURIComponent(formData.mobile_no)}&otp=${encodeURIComponent(otpCode)}`);
       if (res.ok) {
         setOtpState('verified');
       } else {
@@ -149,7 +150,7 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
 
     try {
       // Dynamic Doctor Routing API
-      const response = await fetch(`http://localhost:8000/book/${doctorUsername}`, {
+      const response = await fetch(`${BACKEND_URL}/book/${doctorUsername}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
