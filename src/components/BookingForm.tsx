@@ -10,32 +10,6 @@ function getBrowserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// function buildISOWithTimezone(date: string, time: string, ianaTimezone: string): string {
-//   const utcEpoch = Date.UTC(
-//     parseInt(date.slice(0, 4)), parseInt(date.slice(5, 7)) - 1, parseInt(date.slice(8, 10)),
-//     parseInt(time.slice(0, 2)), parseInt(time.slice(3, 5)), 0
-//   );
-
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: ianaTimezone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-  }).formatToParts(new Date(utcEpoch));
-
-  const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
-  const displayedEpoch = Date.UTC(
-    parseInt(p.year), parseInt(p.month) - 1, parseInt(p.day),
-    parseInt(p.hour === '24' ? '0' : p.hour), parseInt(p.minute), parseInt(p.second)
-  );
-
-  const offsetMinutes = (utcEpoch - displayedEpoch) / 60000;
-  const sign = offsetMinutes >= 0 ? '+' : '-';
-  const absMin = Math.abs(offsetMinutes);
-  const hh = String(Math.floor(absMin / 60)).padStart(2, '0');
-  const mm = String(absMin % 60).padStart(2, '0');
-
-  return `${date}T${time}:00${sign}${hh}:${mm}`;
-}
-
 export default function BookingForm({ doctorUsername }: { doctorUsername: string }) {
   const [geoState, setGeoState] = useState<GeoState>('pending');
   const [timezone, setTimezone] = useState<string>('');
@@ -55,32 +29,29 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     slot_time: '',
   });
 
-  // Change your useEffect to this:
-useEffect(() => {
-  // We still ask for permission for the UI/UX experience
-  if (navigator.geolocation) {
-    setGeoState('detecting');
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        setTimezone('Asia/Kolkata'); // Hardcode to India
-        setGeoState('granted');
-      },
-      () => {
-        setTimezone('Asia/Kolkata');
-        setGeoState('denied');
-      }
-    );
-  } else {
-    setTimezone('Asia/Kolkata');
-    setGeoState('denied');
-  }
-}, []);
+  useEffect(() => {
+    if (navigator.geolocation) {
+      setGeoState('detecting');
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setTimezone('Asia/Kolkata'); // Hardcode to India
+          setGeoState('granted');
+        },
+        () => {
+          setTimezone('Asia/Kolkata');
+          setGeoState('denied');
+        }
+      );
+    } else {
+      setTimezone('Asia/Kolkata');
+      setGeoState('denied');
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // OTP Handlers
   const handleSendOtp = async () => {
     if (!formData.mobile_no) {
       setOtpError('Please enter a WhatsApp number first.');
@@ -143,7 +114,6 @@ useEffect(() => {
     };
 
     try {
-      // Dynamic Doctor Routing API
       const response = await fetch(`${BACKEND_URL}/book/${doctorUsername}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,9 +135,7 @@ useEffect(() => {
   };
 
   const today = new Date().toISOString().split('T')[0];
-  
 
-  // ── Success screen ──
   if (formState === 'success') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center px-4">
@@ -194,11 +162,9 @@ useEffect(() => {
     );
   }
 
-  // ── Main form ──
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 py-12 px-4">
       <div className="max-w-2xl mx-auto">
-
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Book Your Appointment</h1>
           <p className="text-gray-600">Requesting slot with: <span className="font-semibold text-blue-700">@{doctorUsername}</span></p>
@@ -220,7 +186,6 @@ useEffect(() => {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <div className="flex items-center gap-2"><User size={18} /> Full Name</div>
@@ -245,7 +210,6 @@ useEffect(() => {
               />
             </div>
 
-            {/* OTP VERIFICATION SECTION */}
             <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <div className="flex items-center gap-2"><Phone size={18} /> WhatsApp Number</div>
@@ -295,7 +259,6 @@ useEffect(() => {
               {otpError && <p className="text-red-500 text-sm mt-2 font-medium">{otpError}</p>}
             </div>
 
-            {/* Separate Date + Time pickers */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -340,7 +303,6 @@ useEffect(() => {
                 'Request Appointment'
               )}
             </button>
-
           </form>
         </div>
 
@@ -352,7 +314,6 @@ useEffect(() => {
             Register Clinic →
           </button>
         </div>
-
       </div>
     </div>
   );

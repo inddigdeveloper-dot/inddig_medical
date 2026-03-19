@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink } from "lucide-react";
+import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink, Loader2 } from "lucide-react";
 import { BACKEND_URL } from "../config"; 
 
 type Appointment = {
   id: number;
   client_name: string;
   client_email: string;
-  client_mobile_no: string;   
+  whatsapp_no: string;   
   slot_time: string;          
   booking_date?: string; 
   booking_Date?: string; 
   is_approved: boolean;
-  calendar_link?: string; // <-- Added this
+  calendar_link?: string; 
 };
 
 export default function DoctorDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
@@ -144,7 +144,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
     }
   };
 
-  // Fallback Google Calendar URL generator
   const getCalendarDayLink = (dateString: string) => {
     const formattedDate = dateString.split('-').join('/'); 
     return `https://calendar.google.com/calendar/u/0/r/day/${formattedDate}`;
@@ -152,7 +151,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-xl text-sm font-semibold flex items-center gap-2 animate-in slide-in-from-top-4 ${
           toast.ok ? "bg-green-600 text-white" : "bg-red-600 text-white"
@@ -162,7 +160,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         </div>
       )}
 
-      {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6 flex justify-between items-center">
           <div>
@@ -178,7 +175,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           
-          {/* Tabs */}
           <div className="border-b border-gray-200 flex">
             {(["pending", "approved"] as const).map(tab => (
               <button
@@ -197,7 +193,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
             ))}
           </div>
 
-          {/* Loaders & Modals */}
           {isApproving && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
               <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95">
@@ -210,7 +205,32 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
             </div>
           )}
 
-          {/* Content Area */}
+          {/* Edit Modal Re-inserted Here! */}
+          {editingAppt && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Reschedule Appointment</h3>
+                <p className="text-gray-600 mb-4">Editing for: <span className="font-semibold">{editingAppt.client_name}</span></p>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>
+                    <input type="date" value={editForm.date} onChange={(e) => setEditForm({...editForm, date: e.target.value})} className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Time</label>
+                    <input type="time" step="1" value={editForm.time} onChange={(e) => setEditForm({...editForm, time: e.target.value})} className="w-full border border-gray-300 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"/>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button onClick={() => setEditingAppt(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">Cancel</button>
+                  <button onClick={submitEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">Save Changes</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 sm:p-6 bg-slate-50/50 min-h-[400px]">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-500">
@@ -234,7 +254,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                     <div key={apt.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition group">
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         
-                        {/* Patient Info */}
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Patient</p>
@@ -254,7 +273,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                           </div>
                         </div>
 
-                        {/* Actions */}
                         <div className="flex flex-wrap items-center gap-3 lg:border-l lg:border-gray-100 lg:pl-6 pt-4 lg:pt-0 border-t border-gray-100">
                           {activeTab === "pending" ? (
                             <>
@@ -277,7 +295,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                             <Trash2 size={18} />Delete
                           </button>
                         </div>
-
                       </div>
                     </div>
                   );
