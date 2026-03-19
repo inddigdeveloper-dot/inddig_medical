@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Loader2, Phone, ShieldCheck, CheckCircle, User, Mail, Lock } from 'lucide-react';
+import { Loader2, Phone, ShieldCheck, CheckCircle, User, Mail, Lock, Building2 } from 'lucide-react';
 import { BACKEND_URL } from '../config';
 
 export default function DoctorRegister({ onNavigateLogin }: { onNavigateLogin: () => void }) {
   const [formData, setFormData] = useState({ 
+    full_name: '', // <-- THIS WAS MISSING!
     username: '', 
     email: '', 
     whatsapp_no: '', 
@@ -62,6 +63,7 @@ export default function DoctorRegister({ onNavigateLogin }: { onNavigateLogin: (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          full_name: formData.full_name, // <-- Send to backend
           username: formData.username,
           email: formData.email,
           whatsapp_no: formData.whatsapp_no,
@@ -106,7 +108,18 @@ export default function DoctorRegister({ onNavigateLogin }: { onNavigateLogin: (
           <p className="text-gray-500 text-center text-sm md:text-base mb-8">Register your clinic to start accepting bookings</p>
           
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Grid for Desktop / Single Column for Mobile */}
+            
+            {/* Added Full Name Field */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Building2 size={14}/> Clinic / Doctor Name</label>
+              <input
+                type="text" required
+                value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50"
+                placeholder="e.g. Dr. Smith Dental"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><User size={14}/> Username</label>

@@ -25,9 +25,10 @@ class Doctor(Base):
     __tablename__="doctors"
     id = Column(Integer,primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
     whatsapp_no = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-
+    calendar_link = Column(String, nullable=True) # <--- ADD THIS LINE
     is_verified = Column(Boolean, default = False)
     appointments = relationship("Appointment", back_populates="doctor")
 
@@ -38,11 +39,9 @@ class Appointment(Base):
     doctor_id = Column(Integer, ForeignKey("doctors.id"))
     doctor = relationship("Doctor", back_populates="appointments")
 
-
     client_name = Column(String)
     client_email = Column(String, unique=False, index=True)
     whatsapp_no = Column(String, unique=False, index=True)
-
 
     user_timezone = Column(String, default="UTC")
     # patient's booked time 

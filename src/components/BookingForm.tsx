@@ -10,11 +10,11 @@ function getBrowserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-function buildISOWithTimezone(date: string, time: string, ianaTimezone: string): string {
-  const utcEpoch = Date.UTC(
-    parseInt(date.slice(0, 4)), parseInt(date.slice(5, 7)) - 1, parseInt(date.slice(8, 10)),
-    parseInt(time.slice(0, 2)), parseInt(time.slice(3, 5)), 0
-  );
+// function buildISOWithTimezone(date: string, time: string, ianaTimezone: string): string {
+//   const utcEpoch = Date.UTC(
+//     parseInt(date.slice(0, 4)), parseInt(date.slice(5, 7)) - 1, parseInt(date.slice(8, 10)),
+//     parseInt(time.slice(0, 2)), parseInt(time.slice(3, 5)), 0
+//   );
 
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: ianaTimezone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -55,25 +55,26 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     slot_time: '',
   });
 
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setTimezone(getBrowserTimezone());
-      setGeoState('denied');
-      return;
-    }
+  // Change your useEffect to this:
+useEffect(() => {
+  // We still ask for permission for the UI/UX experience
+  if (navigator.geolocation) {
     setGeoState('detecting');
     navigator.geolocation.getCurrentPosition(
       () => {
-        setTimezone(getBrowserTimezone());
+        setTimezone('Asia/Kolkata'); // Hardcode to India
         setGeoState('granted');
       },
       () => {
-        setTimezone(getBrowserTimezone());
+        setTimezone('Asia/Kolkata');
         setGeoState('denied');
-      },
-      { timeout: 8000 }
+      }
     );
-  }, []);
+  } else {
+    setTimezone('Asia/Kolkata');
+    setGeoState('denied');
+  }
+}, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -131,21 +132,14 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     }
 
     setFormState('submitting');
-    setErrorMsg('');
-
-    const tz = timezone || getBrowserTimezone();
-    let isoSlotTime: string;
-    try {
-      isoSlotTime = buildISOWithTimezone(formData.slot_date, formData.slot_time, tz);
-    } catch {
-      isoSlotTime = `${formData.slot_date}T${formData.slot_time}:00Z`;
-    }
+    const isoSlotTime = `${formData.slot_date}T${formData.slot_time}:00`;
 
     const payload = {
       client_name: formData.client_name,
       client_email: formData.client_email,
       mobile_no: formData.mobile_no,
       slot_time: isoSlotTime,
+      user_timezone: "Asia/Kolkata"
     };
 
     try {
