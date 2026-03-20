@@ -1,18 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Calendar, Clock, Mail, Phone, User, Loader2, MapPin, CheckCircle, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Calendar, Clock, Mail, Phone, User, Loader2, CheckCircle, ShieldCheck } from 'lucide-react';
 import { BACKEND_URL } from '../config';
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
-type GeoState = 'pending' | 'detecting' | 'granted' | 'denied';
 type OtpState = 'idle' | 'sending' | 'sent' | 'verifying' | 'verified';
 
-function getBrowserTimezone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
 export default function BookingForm({ doctorUsername }: { doctorUsername: string }) {
-  const [geoState, setGeoState] = useState<GeoState>('pending');
-  const [timezone, setTimezone] = useState<string>('');
   const [formState, setFormState] = useState<FormState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -28,25 +21,6 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
     slot_date: '',
     slot_time: '',
   });
-
-  useEffect(() => {
-    if (navigator.geolocation) {
-      setGeoState('detecting');
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setTimezone('Asia/Kolkata');
-          setGeoState('granted');
-        },
-        () => {
-          setTimezone('Asia/Kolkata');
-          setGeoState('denied');
-        }
-      );
-    } else {
-      setTimezone('Asia/Kolkata');
-      setGeoState('denied');
-    }
-  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -235,6 +209,16 @@ export default function BookingForm({ doctorUsername }: { doctorUsername: string
             </button>
           </form>
         </div>
+        
+        <div className="mt-6 flex justify-between px-2 text-sm font-medium">
+          <button onClick={() => (window as any).navigate('/doctor-login')} className="text-blue-600 hover:text-blue-700">
+            Doctor Login →
+          </button>
+          <button onClick={() => (window as any).navigate('/doctor-register')} className="text-blue-600 hover:text-blue-700">
+            Register Clinic →
+          </button>
+        </div>
+
       </div>
     </div>
   );

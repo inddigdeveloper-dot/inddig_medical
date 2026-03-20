@@ -2,30 +2,152 @@ import { useEffect, useState } from "react";
 import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink, Loader2 } from "lucide-react";
 import { BACKEND_URL } from "../config"; 
 
-// ... Keep your existing Appointment type and Helper functions identical ...
 type Appointment = {
-  id: number; client_name: string; client_email: string; whatsapp_no: string;   
-  slot_time: string; booking_date?: string; booking_Date?: string; 
-  is_approved: boolean; calendar_link?: string; 
+  id: number;
+  client_name: string;
+  client_email: string;
+  whatsapp_no: string;   
+  slot_time: string;          
+  booking_date?: string; 
+  booking_Date?: string; 
+  is_approved: boolean;
+  calendar_link?: string; 
 };
 
 export default function DoctorDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  // ... Keep all your existing state and functions (fetchAppointments, approveAppt, etc.) exactly the same ...
-  // [I am pasting the return block below, which is the only part that needed HTML/Tailwind changes]
-  
-  // (Assuming all logic exists above this line)
   const [isApproving, setIsApproving] = useState(false);
   const [activeTab, setActiveTab] = useState<"pending" | "approved">("pending");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
   const [editingAppt, setEditingAppt] = useState<Appointment | null>(null);
   const [editForm, setEditForm] = useState({ date: "", time: "" });
-  const authHeaders = { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
 
-  const showToast = (msg: string, ok: boolean) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3500); };
-  
-  // [Insert your logic functions: fetchAppointments, approveAppt, deleteAppt, submitEdit, formatDateTime, getCalendarDayLink]
+  const authHeaders = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`
+  };
+
+  const showToast = (msg: string, ok: boolean) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const fetchAppointments = async (tab: "pending" | "approved") => {
+    setIsLoading(true);
+    try {
+      const endpoint = tab === "approved" 
+        ? `${BACKEND_URL}/doctor/approved` 
+        : `${BACKEND_URL}/doctor/pendingappointments`;
+        
+      const res = await fetch(endpoint, { headers: authHeaders });
+      if (res.status === 401) {
+        onLogout();
+        return;
+      }
+      
+      const data = await res.json();
+      setAppointments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setAppointments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments(activeTab);
+  }, [activeTab]);
+
+  const approveAppt = async (id: number) => {
+    setIsApproving(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/approve/${id}`, {
+        method: "POST",
+        headers: authHeaders
+      });
+      const result = await res.json();
+      if (res.ok) {
+        showToast(`✓ ${result.client} approved! Calendar invite sent.`, true);
+        await fetchAppointments(activeTab);
+      } else {
+        showToast(result.detail || "Approval failed.", false);
+      }
+    } catch {
+      showToast("Approval failed. Check backend connection.", false);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const deleteAppt = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this appointment?")) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/delete/${id}`, {
+        method: "DELETE",
+        headers: authHeaders
+      });
+      if (res.ok) {
+        showToast("✓ Appointment deleted successfully.", true);
+        await fetchAppointments(activeTab);
+      } else {
+        showToast("Failed to delete appointment.", false);
+      }
+    } catch {
+      showToast("Delete failed. Check backend connection.", false);
+    }
+  };
+
+  const openEditModal = (apt: Appointment) => {
+    setEditingAppt(apt);
+    const actualDate = apt.booking_date || apt.booking_Date || "";
+    setEditForm({ date: actualDate, time: apt.slot_time || "" });
+  };
+
+  const submitEdit = async () => {
+    if (!editingAppt) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/updateappointment/${editingAppt.id}`, {
+        method: "PATCH",
+        headers: authHeaders,
+        body: JSON.stringify({
+          booking_date: editForm.date,
+          slot_time: editForm.time,
+        }),
+      });
+
+      if (res.ok) {
+        showToast("✓ Appointment updated successfully.", true);
+        setEditingAppt(null);
+        await fetchAppointments(activeTab); 
+      } else {
+        showToast("Failed to update appointment.", false);
+      }
+    } catch {
+      showToast("Update failed. Check backend connection.", false);
+    }
+  };
+
+  const formatDateTime = (dateVal: string, slot_time: string) => {
+    try {
+      if (!dateVal || !slot_time) throw new Error("Missing data");
+      const dt = new Date(`${dateVal}T${slot_time}`);
+      if (isNaN(dt.getTime())) throw new Error("Invalid");
+      return {
+        dateStr: dt.toLocaleDateString("en-IN", { weekday: "short", year: "numeric", month: "long", day: "numeric" }),
+        timeStr: dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+      };
+    } catch {
+      return { dateStr: dateVal || "—", timeStr: slot_time || "—" };
+    }
+  };
+
+  const getCalendarDayLink = (dateString: string) => {
+    const formattedDate = dateString.split('-').join('/'); 
+    return `https://calendar.google.com/calendar/u/0/r/day/${formattedDate}`;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -72,8 +194,19 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
             ))}
           </div>
 
-          {/* ... MODALS ... */}
-          {/* Edit Modal Re-inserted Here! */}
+          {/* Loaders & Modals */}
+          {isApproving && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95">
+                <Loader2 size={48} className="text-blue-600 animate-spin" />
+                <div className="text-center">
+                  <h3 className="text-xl font-bold text-gray-900">Syncing to Calendar</h3>
+                  <p className="text-gray-500 text-sm">Approving and notifying patient...</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {editingAppt && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95">
@@ -90,25 +223,31 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
-                  {/* Buttons stack on mobile */}
                   <button onClick={() => setEditingAppt(null)} className="w-full sm:w-auto px-4 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition order-2 sm:order-1">Cancel</button>
-                  <button /* onClick={submitEdit} */ className="w-full sm:w-auto px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition order-1 sm:order-2">Save Changes</button>
+                  <button onClick={submitEdit} className="w-full sm:w-auto px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition order-1 sm:order-2">Save Changes</button>
                 </div>
               </div>
             </div>
           )}
 
-
           <div className="p-4 sm:p-6 bg-slate-50/50 min-h-[400px]">
-            {/* ... Loaders and Empty States remain identical ... */}
-            
-            {/* APPOINTMENT CARDS */}
-            {!isLoading && appointments.length > 0 && (
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                <Loader2 size={32} className="animate-spin mb-4 text-blue-600" />
+                <p>Loading appointments...</p>
+              </div>
+            ) : appointments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                {activeTab === 'pending' ? <Clock size={48} className="mb-4 opacity-50" /> : <Calendar size={48} className="mb-4 opacity-50" />}
+                <p className="text-lg font-medium text-gray-600">No {activeTab} appointments</p>
+                <p className="text-sm">When patients book, they will appear here.</p>
+              </div>
+            ) : (
               <div className="grid gap-4">
                 {appointments.map((apt) => {
-                  // const actualDate = apt.booking_date || apt.booking_Date || "";
-                  // const { dateStr, timeStr } = formatDateTime(actualDate, apt.slot_time);
-                  // const calendarUrl = apt.calendar_link || getCalendarDayLink(actualDate);
+                  const actualDate = apt.booking_date || apt.booking_Date || "";
+                  const { dateStr, timeStr } = formatDateTime(actualDate, apt.slot_time);
+                  const calendarUrl = apt.calendar_link || getCalendarDayLink(actualDate);
                   
                   return (
                     <div key={apt.id} className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md transition">
@@ -128,12 +267,11 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                           
                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 h-fit">
                             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Calendar size={12}/> Schedule</p>
-                            <p className="font-semibold text-gray-900 text-sm">Sample Date</p>
-                            <p className="text-blue-700 font-bold mt-0.5">Sample Time</p>
+                            <p className="font-semibold text-gray-900 text-sm">{dateStr}</p>
+                            <p className="text-blue-700 font-bold mt-0.5">{timeStr}</p>
                           </div>
                         </div>
 
-                        {/* RESPONSIVE BUTTONS: Stack vertically on small phones */}
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 lg:border-l lg:border-gray-100 lg:pl-6 pt-4 lg:pt-0 border-t border-gray-100 w-full lg:w-auto">
                           {activeTab === "pending" ? (
                             <>
@@ -143,7 +281,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                           ) : (
                             <>
                               <a 
-                                href={"#"} 
+                                href={calendarUrl} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="w-full sm:w-auto flex-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl font-bold transition flex items-center justify-center gap-2"
