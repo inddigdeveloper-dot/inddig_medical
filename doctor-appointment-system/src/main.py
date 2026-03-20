@@ -271,7 +271,7 @@ async def update_appointment(appointment_id: int, update_data: AppointmentUpdate
 
 @app.post("/doctor/approve/{appointment_id}")
 async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = Depends(auth.get_current_doctor), session: Session = Depends(get_db)):
-    # 1. Fetch from DB
+    # 1. Fetch from DB - DO THIS OUTSIDE TRY
     apt = session.query(db.Appointment).filter(db.Appointment.id == appointment_id).first()
     
     if not apt:
@@ -282,14 +282,20 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
     
     if apt.is_approved:
         return {"message": "Appointment already approved."}
+
+    # 2. Prepare Data - DO THIS OUTSIDE TRY
     display_name = getattr(current_doctor, 'full_name', current_doctor.username)
-    # 2. Prepare the message
     date_str = apt.booking_date.strftime("%d %b %Y")
     time_str = apt.slot_time.strftime("%I:%M %p")
     msg = f"Hi {apt.client_name}, your dental appointment has been confirmed by {current_doctor.username}."
+    
+    # Clean the phone number here
+    phone = apt.whatsapp_no
+    if phone and len(phone) == 10:
+        phone = f"91{phone}"
 
     try:
-        # 3. Call our helper with data from the DB record
+        # 3. External API Calls
         calendar_link, event_id = add_to_calendar(
             name=apt.client_name,
             email=apt.client_email,
@@ -300,25 +306,26 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
             user_timezone=apt.user_timezone
         )
 
-        # 4. Update status in DB only if Calendar succeeds
+        # 4. Update DB
         apt.is_approved = True
-        
-        # Save the calendar event ID to the database so we can delete it later
         if hasattr(apt, 'calendar_event_id'):
             apt.calendar_event_id = event_id
             apt.calendar_link = calendar_link 
 
         session.commit()
 
+        # 5. Background Tasks / Notifications
+        # Use 'phone' (the cleaned version) and 'apt' safely here
         schedule_reminder(apt, display_name)
         
         send_whatsapp_confirmation(
-            phone_number=apt.whatsapp_no,
+            phone_number=phone, # Use the cleaned phone variable
             client_name=apt.client_name,
             doctor_name=display_name,
             date=date_str,
             time=time_str
         )
+
         return {
             "status": "Approved",
             "client": apt.client_name,
@@ -327,8 +334,9 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
 
     except Exception as e:
         session.rollback()
+        # Log the actual error to Railway logs so you can see it
+        print(f"DETAILED ERROR: {str(e)}") 
         raise HTTPException(status_code=500, detail=f"Approval failed: {str(e)}")
-
 
 @app.get("/doctor/approved")
 async def get_approved_appointments(current_doctor: db.Doctor = Depends(auth.get_current_doctor), session: Session = Depends(get_db)):
