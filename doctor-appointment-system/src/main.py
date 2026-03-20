@@ -44,24 +44,26 @@ def get_service_calendar():
     return build('calendar', 'v3', credentials=creds)
 
 def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
-    url = config.AISENSY_API_URL
+    # Use the exact URL that worked in the test script. 
+    # (If this is in your config.py, you can use config.AISENSY_API_URL, but make sure it matches!)
+    url = "https://backend.aisensy.com/campaign/t1/api/v2/messages" 
     
-    # 1. Ensure phone number is in '919876543210' format
+    # 1. Clean the phone number
     destination_phone = phone_number.replace("+", "").replace(" ", "").strip()
     if len(destination_phone) == 10:
         destination_phone = f"91{destination_phone}"
 
-    # 2. Match your template: {{1}}=Name, {{2}}=Clinic/Doctor, {{3}}=Date, {{4}}=Time
+    # 2. The exact payload structure that returned 200 OK
     payload = {
-        "apiKey": config.AISENSY_API_KEY_WP, # 'K' must be CAPITAL
+        "apiKey": config.AISENSY_API_KEY_WP, 
         "campaignName": "appotment_approvement",
         "destination": destination_phone,
         "userName": client_name,
         "templateParams": [
-            client_name, # {{1}}
-            doctor_name, # {{2}}
-            date,        # {{3}}
-            time         # {{4}}
+            str(client_name), # {{1}}
+            str(doctor_name), # {{2}}
+            str(date),        # {{3}}
+            str(time)         # {{4}}
         ],
         "source": "new-landing-page form",
         "media": {},
@@ -76,10 +78,17 @@ def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name:
     
     try:
         response = requests.post(url, json=payload, headers=headers)
-        # Check your Railway logs for this output to confirm success
-        print(f"AiSensy Status: {response.status_code} - {response.text}")
+        
+        # If it fails, print the exact reason to the Railway logs
+        if response.status_code != 200:
+             print(f"🚨 AiSensy Error Payload: {response.json()}") 
+             # We won't raise a 500 error here anymore so that the appointment 
+             # still gets approved in your database even if WhatsApp has a hiccup!
+        else:
+             print(f"✅ WhatsApp Success: {response.json()}")
+             
     except Exception as e:
-        print(f"WhatsApp notification failed: {e}")
+        print(f"🚨 WhatsApp notification failed completely: {e}")
 
 def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_message, user_timezone="UTC"):
     service = get_service_calendar()
