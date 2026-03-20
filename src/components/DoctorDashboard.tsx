@@ -6,7 +6,7 @@ type Appointment = {
   id: number;
   client_name: string;
   client_email: string;
-  client_mobile_no: string;   
+  whatsapp_no: string;   
   slot_time: string;          
   booking_date?: string; 
   booking_Date?: string; 
@@ -255,7 +255,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                           </div>
                           <div className="flex items-center gap-3">
                             <Phone size={18} className="text-gray-500 flex-shrink-0" />
-                            <p className="text-gray-700">{apt.client_mobile_no}</p>
+                            <p className="text-gray-700">{apt.whatsapp_no}</p>
                           </div>
                           <div className="flex items-start sm:items-center gap-3">
                             <Calendar size={18} className="text-gray-500 flex-shrink-0 mt-0.5 sm:mt-0" />

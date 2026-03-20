@@ -243,7 +243,7 @@ export default function DoctorLogin({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
               <UserCircle size={16} className="text-gray-400" />
-              Username, Email, or WhatsApp
+              Username
             </label>
             <input
               type="text" required
