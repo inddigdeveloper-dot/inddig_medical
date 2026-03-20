@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Loader2, KeyRound, UserCircle, ArrowLeft, Phone, ShieldCheck, Lock, CheckCircle } from 'lucide-react';
 import { BACKEND_URL } from '../config';
 
-export default function DoctorLogin({ 
-  onLoginSuccess, 
-  onNavigateRegister 
-}: { 
+export default function DoctorLogin({
+  onLoginSuccess,
+  onNavigateRegister
+}: {
   onLoginSuccess: (token: string) => void;
   onNavigateRegister: () => void;
 }) {
@@ -94,18 +94,18 @@ export default function DoctorLogin({
       setResetError('Passwords do not match!');
       return;
     }
-    
+
     setIsResetLoading(true);
     setResetError('');
 
     try {
-      // NOTE: You will need to create this endpoint in main.py
-      const res = await fetch(`${BACKEND_URL}/doctor/reset-password`, {
+      const res = await fetch(`${BACKEND_URL}/doctor/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          whatsapp_no: resetMobile,
-          new_password: newPassword
+          identifier: resetMobile,
+          otp: resetOtpCode,        // Sending the OTP for backend security check
+          password: newPassword     // Changing to "password" instead of "new_password"
         })
       });
 
@@ -122,14 +122,13 @@ export default function DoctorLogin({
     }
   };
 
-
   // ==========================================
   // RENDER: FORGOT PASSWORD VIEW
   // ==========================================
   if (view === 'forgot') {
     if (resetSuccess) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6">
           <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center animate-in fade-in zoom-in-95">
             <div className="text-green-500 mb-4 flex justify-center"><CheckCircle size={60} /></div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Password Reset!</h2>
@@ -144,8 +143,8 @@ export default function DoctorLogin({
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4">
-          
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+
           <button onClick={() => setView('login')} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 text-sm font-medium transition">
             <ArrowLeft size={16} /> Back to Login
           </button>
@@ -157,33 +156,33 @@ export default function DoctorLogin({
 
           <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
             {/* Step 1: Verify Phone */}
-            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+            <div className="bg-blue-50/50 p-4 sm:p-5 rounded-xl border border-blue-100">
               <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                 <Phone size={16} /> WhatsApp Number
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <input
                   type="tel" required disabled={resetOtpState === 'verified' || resetOtpState === 'sent'}
                   value={resetMobile} onChange={e => setResetMobile(e.target.value)}
-                  className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-white/50"
+                  className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-white/50"
                   placeholder="919876543210"
                 />
-                
+
                 {resetOtpState === 'idle' && (
-                  <button type="button" onClick={handleSendResetOtp} className="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-lg font-medium transition">Verify</button>
+                  <button type="button" onClick={handleSendResetOtp} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-medium transition whitespace-nowrap">Verify</button>
                 )}
                 {resetOtpState === 'sending' && (
-                  <button type="button" disabled className="bg-blue-400 text-white px-4 rounded-lg flex items-center gap-2"><Loader2 size={16} className="animate-spin" /></button>
+                  <button type="button" disabled className="w-full sm:w-auto bg-blue-400 text-white px-5 py-3 rounded-lg flex justify-center items-center gap-2"><Loader2 size={16} className="animate-spin" /></button>
                 )}
                 {resetOtpState === 'verified' && (
-                  <div className="bg-green-100 text-green-700 px-4 rounded-lg font-medium flex items-center gap-2"><ShieldCheck size={20} /></div>
+                  <div className="w-full sm:w-auto bg-green-100 text-green-700 px-5 py-3 rounded-lg font-medium flex justify-center items-center gap-2"><ShieldCheck size={20} /> Verified</div>
                 )}
               </div>
 
               {(resetOtpState === 'sent' || resetOtpState === 'verifying') && (
-                <div className="mt-3 flex gap-2 animate-in fade-in slide-in-from-top-2">
-                  <input type="text" placeholder="6-digit OTP" value={resetOtpCode} onChange={e => setResetOtpCode(e.target.value)} className="flex-1 px-4 py-2 rounded-lg border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500"/>
-                  <button type="button" onClick={handleVerifyResetOtp} disabled={resetOtpState === 'verifying'} className="bg-green-600 hover:bg-green-700 text-white px-4 rounded-lg font-medium transition">
+                <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2">
+                  <input type="text" placeholder="6-digit OTP" value={resetOtpCode} onChange={e => setResetOtpCode(e.target.value)} className="flex-1 w-full px-4 py-3 rounded-lg border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" onClick={handleVerifyResetOtp} disabled={resetOtpState === 'verifying'} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition flex justify-center items-center">
                     {resetOtpState === 'verifying' ? <Loader2 size={16} className="animate-spin" /> : 'Confirm'}
                   </button>
                 </div>
@@ -195,7 +194,7 @@ export default function DoctorLogin({
             {resetOtpState === 'verified' && (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16}/> New Password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16} /> New Password</label>
                   <input
                     type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
                     className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
@@ -203,7 +202,7 @@ export default function DoctorLogin({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16}/> Confirm Password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16} /> Confirm Password</label>
                   <input
                     type="password" required value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)}
                     className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
@@ -233,13 +232,13 @@ export default function DoctorLogin({
   // ==========================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-8 animate-in fade-in zoom-in-95">
-        
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 space-y-8 animate-in fade-in zoom-in-95">
+
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Clinic Login</h1>
           <p className="text-sm text-gray-500">Access your appointment dashboard</p>
         </div>
-        
+
         <form onSubmit={handleLoginSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -260,8 +259,8 @@ export default function DoctorLogin({
                 <KeyRound size={16} className="text-gray-400" />
                 Password
               </label>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setView('forgot')}
                 className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
               >
@@ -275,9 +274,9 @@ export default function DoctorLogin({
               placeholder="Enter password"
             />
           </div>
-          
+
           {loginError && <div className="text-red-700 text-sm text-center font-medium bg-red-50 py-2 rounded-md border border-red-100">{loginError}</div>}
-          
+
           <button
             type="submit" disabled={isLoginLoading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition shadow-md flex justify-center items-center gap-2 disabled:opacity-70"

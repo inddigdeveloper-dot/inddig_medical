@@ -163,7 +163,11 @@ def register_doctor(doctor: DoctorCreate, session: Session = Depends(get_db)):
 @app.post("/doctor/login")
 def login_doctor(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db)):
     # Check if the doctor exists
-    db_doctor = session.query(db.Doctor).filter(db.Doctor.username == form_data.username).first()
+    db_doctor = session.query(db.Doctor).filter(
+        (db.Doctor.username == form_data.username) |
+        (db.Doctor.email == form_data.username) |
+        (db.Doctor.whatsapp_no == form_data.username)
+    ).first()
     if not db_doctor or not auth.verify_password(form_data.password, db_doctor.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     # Create an access token
