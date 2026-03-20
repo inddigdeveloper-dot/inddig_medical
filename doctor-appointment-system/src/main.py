@@ -206,13 +206,12 @@ def request_appointment(doctor_username: str, request: AppointmentRequest, sessi
     if not request.slot_time:
         raise HTTPException(status_code=400, detail="slot_time is required.")
     try:
-        # Parse the string into a full datetime object first
-        parsed_datetime = datetime.strptime(request.slot_time, "%Y-%m-%dT%H:%M:%S%z")
+        # We removed the %z at the end so it accepts the simple ISO string
+        parsed_datetime = datetime.strptime(request.slot_time, "%Y-%m-%dT%H:%M:%S")
         booking_date = parsed_datetime.date()
         slot_time_obj = parsed_datetime.time()
     except ValueError:
-        raise HTTPException(status_code=400, detail="slot_time must be in ISO 8601 format, e.g. 2026-03-12T14:30:00Z")
-    
+        raise HTTPException(status_code=400, detail="slot_time must be in format YYYY-MM-DDTHH:MM:SS")
     new_appointment = db.Appointment(
         doctor_id=doctor.id,
         client_name=request.client_name,
