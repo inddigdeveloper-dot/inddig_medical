@@ -45,27 +45,41 @@ def get_service_calendar():
 
 def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
     url = config.AISENSY_API_URL
-    payload={
-        "apikey": config.AISENSY_API_KEY_WP,
+    
+    # 1. Ensure phone number is in '919876543210' format
+    destination_phone = phone_number.replace("+", "").replace(" ", "").strip()
+    if len(destination_phone) == 10:
+        destination_phone = f"91{destination_phone}"
+
+    # 2. Match your template: {{1}}=Name, {{2}}=Clinic/Doctor, {{3}}=Date, {{4}}=Time
+    payload = {
+        "apiKey": config.AISENSY_API_KEY_WP, # 'K' must be CAPITAL
         "campaignName": "appotment_approvement",
-        "destination": phone_number,
+        "destination": destination_phone,
         "userName": client_name,
-        "templateParams": [client_name, doctor_name, date, time],
+        "templateParams": [
+            client_name, # {{1}}
+            doctor_name, # {{2}}
+            date,        # {{3}}
+            time         # {{4}}
+        ],
         "source": "new-landing-page form",
         "media": {},
         "buttons": [],
         "carouselCards": [],
         "location": {},
         "attributes": {},
-        "paramsFallbackValue": {
-         "FirstName": "user"
-        }
+        "paramsFallbackValue": {"FirstName": "user"}
     }
-    headers = {"content-type": "application/json"}
+
+    headers = {"Content-Type": "application/json"}
+    
     try:
-        requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json=payload, headers=headers)
+        # Check your Railway logs for this output to confirm success
+        print(f"AiSensy Status: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"whatsapp notification confirmation failed: {e}")
+        print(f"WhatsApp notification failed: {e}")
 
 def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_message, user_timezone="UTC"):
     service = get_service_calendar()
@@ -297,9 +311,6 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
         session.commit()
 
         schedule_reminder(apt, display_name)
-        clean_phone = apt.whatsapp_no
-        if len(clean_phone) == 10:
-            clean_phone = f"91{clean_phone}"
         
         send_whatsapp_confirmation(
             phone_number=apt.whatsapp_no,
