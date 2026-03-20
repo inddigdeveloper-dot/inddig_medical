@@ -67,11 +67,6 @@ def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name:
     except Exception as e:
         print(f"whatsapp notification confirmation failed: {e}")
 
-
-
-# def send_whatsapp_cancellation(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
-
-
 def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_message, user_timezone="UTC"):
     service = get_service_calendar()
 
@@ -302,7 +297,10 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
         session.commit()
 
         schedule_reminder(apt, display_name)
-                
+        clean_phone = apt.whatsapp_no
+        if len(clean_phone) == 10:
+            clean_phone = f"91{clean_phone}"
+        
         send_whatsapp_confirmation(
             phone_number=apt.whatsapp_no,
             client_name=apt.client_name,
