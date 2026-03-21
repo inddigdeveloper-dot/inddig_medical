@@ -41,26 +41,40 @@ def get_service_calendar():
     return build('calendar', 'v3', credentials=creds)
 
 def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
-    # Use the exact URL that worked in the test script. 
-    # (If this is in your config.py, you can use config.AISENSY_API_URL, but make sure it matches!)
-    url = "https://backend.aisensy.com/campaign/t1/api/v2/messages" 
+    print("\n--- 🛠️ STARTING WHATSAPP CONFIRMATION DEBUG 🛠️ ---")
     
-    # 1. Clean the phone number
+    url = config.AISENSY_API_URL 
+    api_key = config.AISENSY_API_KEY_WP
+    
+    # DEBUG 1: Check if environment variables are actually loaded
+    if not url:
+        print("🚨 CRITICAL ERROR: config.AISENSY_API_URL is missing! Check your Railway Variables or .env file.")
+        return # Stop execution so we don't crash
+        
+    if not api_key:
+        print("🚨 CRITICAL ERROR: config.AISENSY_API_KEY_WP is missing! Check your Railway Variables or .env file.")
+        return
+
+    # DEBUG 2: Check phone number formatting
     destination_phone = phone_number.replace("+", "").replace(" ", "").strip()
     if len(destination_phone) == 10:
         destination_phone = f"91{destination_phone}"
+        
+    print(f"👉 Target URL: {url}")
+    print(f"👉 Formatted Phone: {destination_phone}")
+    print(f"👉 Using API Key: {api_key[:10]}... (truncated for security)")
 
-    # 2. The exact payload structure that returned 200 OK
+    # The payload
     payload = {
-        "apiKey": config.AISENSY_API_KEY_WP, 
-        "campaignName": "appotment_approvement",
+        "apiKey": api_key, 
+        "campaignName": "appotment_approvement", # Must match AiSensy EXACTLY
         "destination": destination_phone,
         "userName": client_name,
         "templateParams": [
-            str(client_name), # {{1}}
-            str(doctor_name), # {{2}}
-            str(date),        # {{3}}
-            str(time)         # {{4}}
+            str(client_name),
+            str(doctor_name),
+            str(date),       
+            str(time)        
         ],
         "source": "new-landing-page form",
         "media": {},
@@ -74,18 +88,27 @@ def send_whatsapp_confirmation(phone_number: str, doctor_name: str, client_name:
     headers = {"Content-Type": "application/json"}
     
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        print("👉 Sending payload to AiSensy...")
+        # Added a 10-second timeout so it doesn't hang forever
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         
-        # If it fails, print the exact reason to the Railway logs
+        # DEBUG 3: Catch API rejections specifically
         if response.status_code != 200:
-             print(f"🚨 AiSensy Error Payload: {response.json()}") 
-             # We won't raise a 500 error here anymore so that the appointment 
-             # still gets approved in your database even if WhatsApp has a hiccup!
+             print(f"🚨 AiSensy API REJECTED the request!")
+             print(f"🚨 Status Code: {response.status_code}")
+             print(f"🚨 Exact Error Reason: {response.text}") 
         else:
-             print(f"✅ WhatsApp Success: {response.json()}")
+             print(f"✅ WhatsApp Success Response: {response.json()}")
              
+    # Catch internet/network issues
+    except requests.exceptions.RequestException as req_err:
+        print(f"🚨 Network Error (Could not reach AiSensy): {req_err}")
+    # Catch python coding errors
     except Exception as e:
-        print(f"🚨 WhatsApp notification failed completely: {e}")
+        print(f"🚨 General Python Error in WhatsApp function: {e}")
+        
+    print("--- 🛠️ END WHATSAPP CONFIRMATION DEBUG 🛠️ ---\n")
+
 
 def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_message, user_timezone="UTC"):
     service = get_service_calendar()
@@ -432,6 +455,7 @@ async def delete_appointment(appointment_id: int,
     session.commit()
     
     return {"message": f"Appointment is deleted successfully for {apt.client_name}"}
+
 
 
     
