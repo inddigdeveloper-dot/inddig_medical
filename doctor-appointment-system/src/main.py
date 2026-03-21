@@ -184,22 +184,45 @@ class passwordResetRequest(BaseModel):
 # --- API Endpoints ---
 @app.post("/doctor/register")
 def register_doctor(doctor: DoctorCreate, session: Session = Depends(get_db)):
-    # Check if the doctor already exists
-    db_doctor = session.query(db.Doctor).filter(db.Doctor.username == doctor.username).first()
-    if db_doctor:
-        raise HTTPException(status_code=400, detail="Doctor with this username already exists.")
+    print("\n--- 🛠️ REGISTRATION DATA FLOW DEBUG 🛠️ ---")
+    print(f"📥 Incoming JSON -> Name: {doctor.full_name}, User: {doctor.username}, WP: {doctor.whatsapp_no}, Email: {doctor.email}")
+
+    # Check if username exists
+    existing_user = session.query(db.Doctor).filter(db.Doctor.username == doctor.username).first()
+    if existing_user:
+        print(f"❌ Aborting: Username '{doctor.username}' already in DB.")
+        raise HTTPException(status_code=400, detail="Username already exists.")
 
     # Hash the password
     hashed_password = auth.get_password_hash(doctor.password)
 
-    # Create a new doctor
-    new_doctor = db.Doctor(username=doctor.username, hashed_password=hashed_password)
-    session.add(new_doctor)
-    session.commit()
-    session.refresh(new_doctor)
-    # return {"message": "Doctor registered successfully."}
+    # CREATE THE OBJECT WITH ALL FIELDS
+    new_doctor = db.Doctor(
+        full_name=doctor.full_name,        # NOW BEING SAVED
+        username=doctor.username,
+        email=doctor.email,                # NOW BEING SAVED
+        whatsapp_no=doctor.whatsapp_no,    # NOW BEING SAVED
+        hashed_password=hashed_password
+    )
+
+    try:
+        session.add(new_doctor)
+        session.commit()
+        session.refresh(new_doctor)
+        
+        print("✅ DATABASE RECORD CREATED SUCCESSFULLY")
+        print(f"🆔 New Doctor ID: {new_doctor.id}")
+        print(f"📱 Saved WhatsApp in DB: {new_doctor.whatsapp_no}")
+        
+    except Exception as e:
+        session.rollback()
+        print(f"🚨 DB COMMIT FAILED: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error during registration.")
 
     booking_link = f"{config.FRONTEND_BOOKING_BASE_URL}/{new_doctor.username}"
+    print(f"🔗 Booking Link: {booking_link}")
+    print("--- 🛠️ END REGISTRATION DEBUG 🛠️ ---\n")
+    
     return {"message": "Doctor registered!", "booking_link": booking_link}
 
 @app.post("/doctor/login")
@@ -218,26 +241,51 @@ def login_doctor(form_data: OAuth2PasswordRequestForm = Depends(), session: Sess
 
 @app.post("/doctor/forgot-password")
 def forgot_password(request: passwordResetRequest, session: Session = Depends(get_db)):
+    print(f"\n--- 🛠️ STARTING PASSWORD RESET DEBUG for {request.identifier} 🛠️ ---")
+    
+    # 1. Check OTP Storage
     otp_stored = auth.otp_storage.get(request.identifier)
+    print(f"👉 Stored OTP: {otp_stored} | User Provided OTP: {request.otp}")
+    
     if not otp_stored or otp_stored != request.otp:
+        print("🚨 CRITICAL ERROR: OTP mismatch or OTP expired/not found in storage.")
+        print("--- 🛠️ END PASSWORD RESET DEBUG 🛠️ ---\n")
         raise HTTPException(status_code=400, detail="Invalid OTP or number or email.")
     
+    print("✅ OTP matched successfully.")
+
+    # 2. Query the Database
+    print(f"👉 Searching database for Doctor with email or whatsapp_no: {request.identifier}")
     db_doctor = session.query(db.Doctor).filter(
         (db.Doctor.whatsapp_no == request.identifier) |
         (db.Doctor.email == request.identifier)
     ).first()
 
     if not db_doctor:
+        print(f"🚨 CRITICAL ERROR: OTP was correct, but no Doctor exists in the DB with identifier {request.identifier}")
+        print("--- 🛠️ END PASSWORD RESET DEBUG 🛠️ ---\n")
         raise HTTPException(status_code=404, detail="No account found with the provided number or email")
     
-    db_doctor.hashed_password = auth.get_password_hash(request.password)
-    session.commit()
+    print(f"✅ Doctor found in DB: {db_doctor.username}. Proceeding to update password.")
 
+    # 3. Update Password
+    try:
+        db_doctor.hashed_password = auth.get_password_hash(request.password)
+        session.commit()
+        print("✅ Password successfully hashed and saved to database.")
+    except Exception as e:
+        session.rollback()
+        print(f"🚨 DATABASE ERROR: Failed to save new password: {e}")
+        print("--- 🛠️ END PASSWORD RESET DEBUG 🛠️ ---\n")
+        raise HTTPException(status_code=500, detail="Internal database error while resetting password.")
+
+    # 4. Cleanup
     if request.identifier in auth.otp_storage:
-        # gotta delete the OTP after successful reset to prevent reuse
         del auth.otp_storage[request.identifier]
+        print(f"✅ OTP for {request.identifier} deleted from temporary storage to prevent reuse.")
+        
+    print("--- 🛠️ END PASSWORD RESET DEBUG (SUCCESS) 🛠️ ---\n")
     return {"message": "Password reset successful."}
-
 
 @app.post("/book/{doctor_username}")
 def request_appointment(doctor_username: str, request: AppointmentRequest, session: Session = Depends(get_db)):

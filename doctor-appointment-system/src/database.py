@@ -24,11 +24,12 @@ Base = declarative_base()
 class Doctor(Base):
     __tablename__="doctors"
     id = Column(Integer,primary_key=True, index=True)
+    full_name = Column(String, nullable=True) 
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     whatsapp_no = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    calendar_link = Column(String, nullable=True) # <--- ADD THIS LINE
+    calendar_link = Column(String, nullable=True) 
     is_verified = Column(Boolean, default = False)
     appointments = relationship("Appointment", back_populates="doctor")
 
