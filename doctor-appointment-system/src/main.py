@@ -103,6 +103,11 @@ def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_m
     local_start = datetime.combine(booking_date, slot_time).replace(tzinfo=patient_tz)
     local_end = local_start + timedelta(minutes=30)
 
+    attendees_list = []
+    if email:
+        attendees_list.append({'email': email})
+    if doctor_email:
+        attendees_list.append({'email': doctor_email})
     # 3. Format the event body
     time_str = local_start.strftime('%I:%M %p')
     event = {
@@ -110,8 +115,7 @@ def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_m
         'description': f'{custom_message}\n\nNote: This is {time_str} in your time ({user_timezone})',
         'start': {'dateTime': local_start.isoformat(), 'timeZone': user_timezone},
         'end': {'dateTime': local_end.isoformat(), 'timeZone': user_timezone},
-        'attendees': [{'email': email},
-                      {'email': doctor_email}]
+        'attendees': attendees_list[]
     }
 
     # 4. Execute the insert
