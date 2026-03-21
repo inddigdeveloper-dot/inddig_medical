@@ -41,8 +41,8 @@ class Appointment(Base):
     doctor = relationship("Doctor", back_populates="appointments")
 
     client_name = Column(String)
-    client_email = Column(String, unique=False, index=True)
-    whatsapp_no = Column(String, unique=False, index=True)
+    client_email = Column(String, unique=True, index=True)
+    whatsapp_no = Column(String, unique=True, index=True)
 
     user_timezone = Column(String, default="UTC")
     # patient's booked time 
