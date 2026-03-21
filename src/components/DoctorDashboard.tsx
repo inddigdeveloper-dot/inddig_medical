@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut } from "lucide-react";
+// 1. ADDED 'ExternalLink' to the imports
+import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink } from "lucide-react";
 import { BACKEND_URL } from "../config"; 
 
 type Appointment = {
@@ -11,6 +12,8 @@ type Appointment = {
   booking_date?: string; 
   booking_Date?: string; 
   is_approved: boolean;
+  // 2. ADDED the calendar link to the type definition
+  google_calendar_link?: string; 
 };
 
 export default function DoctorDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
@@ -23,7 +26,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   const [editingAppt, setEditingAppt] = useState<Appointment | null>(null);
   const [editForm, setEditForm] = useState({ date: "", time: "" });
 
-  // Standard Header configuration for authenticated requests
   const authHeaders = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${token}`
@@ -43,7 +45,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         
       const res = await fetch(endpoint, { headers: authHeaders });
       if (res.status === 401) {
-        onLogout(); // Token expired
+        onLogout(); 
         return;
       }
       
@@ -267,18 +269,34 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                           </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-3 pt-2 lg:pt-0 border-t lg:border-none border-gray-100">
+                        <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4 lg:pt-0 border-t lg:border-none border-gray-100">
                           {activeTab === "pending" && (
                             <>
                               <button onClick={() => approveAppt(apt.id)} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2"><CheckCircle size={18} />Approve</button>
                               <button onClick={() => openEditModal(apt)} className="flex-1 sm:flex-none bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2"><Edit size={18} />Edit</button>
                             </>
                           )}
+                          
                           {activeTab === "approved" && (
-                            <span className="w-full sm:w-auto bg-green-100 text-green-800 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 h-fit">
-                              <CheckCircle size={16} />Confirmed
-                            </span>
+                            <>
+                              <span className="w-full sm:w-auto bg-green-100 text-green-800 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 h-fit">
+                                <CheckCircle size={16} />Confirmed
+                              </span>
+                              
+                              {/* 3. ADDED: Show Appointment Button */}
+                              {apt.google_calendar_link && (
+                                <a 
+                                  href={apt.google_calendar_link} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 px-4 py-2.5 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 h-fit"
+                                >
+                                  <ExternalLink size={16} /> Show Appointment
+                                </a>
+                              )}
+                            </>
                           )}
+                          
                           <button onClick={() => deleteAppt(apt.id)} className="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2 h-fit">
                             <Trash2 size={18} />Delete
                           </button>

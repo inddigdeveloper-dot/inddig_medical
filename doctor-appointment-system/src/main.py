@@ -399,7 +399,7 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
         phone = f"91{phone}"
 
     try:
-        # 3. External API Calls
+        # 3. External API Calls returns the link and ID
         calendar_link, event_id = add_to_calendar(
             name=apt.client_name,
             email=apt.client_email,
@@ -410,14 +410,12 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
             user_timezone=apt.user_timezone
         )
 
-        # 4. Update DB
+        # 4. Update DB - Corrected assignments
         apt.is_approved = True
-        if hasattr(apt, 'calendar_event_id'):
-            apt.calendar_event_id = event_id
-            apt.calendar_link = calendar_link 
+        apt.calendar_event_id = event_id
+        apt.google_calendar_link = calendar_link # This is the link for your button!
 
         session.commit()
-
         # 5. Background Tasks / Notifications
         # Use 'phone' (the cleaned version) and 'apt' safely here
         schedule_reminder(apt, display_name)

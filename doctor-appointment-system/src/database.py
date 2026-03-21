@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import ForeignKey, create_engine,Integer, Date, Time, Column, String, Boolean, ForeignKey
+from sqlalchemy import ForeignKey, create_engine,Integer, Date, Time, Column, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker,relationship,Session
 from datetime import datetime, UTC
@@ -26,8 +26,8 @@ class Doctor(Base):
     id = Column(Integer,primary_key=True, index=True)
     full_name = Column(String, nullable=True) 
     username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    whatsapp_no = Column(String, unique=True, index=True)
+    email = Column(String, unique=False, index=True)
+    whatsapp_no = Column(String, unique=False, index=True)
     hashed_password = Column(String)
     calendar_link = Column(String, nullable=True) 
     is_verified = Column(Boolean, default = False)
@@ -52,6 +52,7 @@ class Appointment(Base):
     # approval status of the appointment
     is_approved = Column(Boolean, default = False)
     calendar_event_id = Column(String, nullable=True)
+    google_calendar_link = Column(String, nullable=True) # The HTML Link for the button
     
 Base.metadata.create_all(bind=engine)
 def get_db():
