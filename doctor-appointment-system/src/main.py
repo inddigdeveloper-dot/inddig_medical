@@ -115,7 +115,7 @@ def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_m
         'description': f'{custom_message}\n\nNote: This is {time_str} in your time ({user_timezone})',
         'start': {'dateTime': local_start.isoformat(), 'timeZone': user_timezone},
         'end': {'dateTime': local_end.isoformat(), 'timeZone': user_timezone},
-        'attendees': attendees_list[]
+        'attendees': attendees_list[],
     }
 
     # 4. Execute the insert
