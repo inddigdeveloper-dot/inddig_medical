@@ -391,7 +391,7 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
     display_name = getattr(current_doctor, 'full_name', current_doctor.username)
     date_str = apt.booking_date.strftime("%d %b %Y")
     time_str = apt.slot_time.strftime("%I:%M %p")
-    msg = f"Hi {apt.client_name}, your dental appointment has been confirmed by {current_doctor.username}."
+    msg = f"Hi {apt.client_name}, your dental appointment has been confirmed by {current_doctor.full_name}."
     
     # Clean the phone number here
     phone = apt.whatsapp_no
