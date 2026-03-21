@@ -227,17 +227,39 @@ def register_doctor(doctor: DoctorCreate, session: Session = Depends(get_db)):
 
 @app.post("/doctor/login")
 def login_doctor(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db)):
-    # Check if the doctor exists
+    print(f"\n--- 🔐 DOCTOR LOGIN ATTEMPT 🔐 ---")
+    print(f"👉 Identifier Provided: {form_data.username}")
+
+    # 1. Search the DB for any of the three fields
     db_doctor = session.query(db.Doctor).filter(
         (db.Doctor.username == form_data.username) |
         (db.Doctor.email == form_data.username) |
         (db.Doctor.whatsapp_no == form_data.username)
     ).first()
-    if not db_doctor or not auth.verify_password(form_data.password, db_doctor.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    # 2. Check if Doctor exists
+    if not db_doctor:
+        print(f"❌ LOGIN FAILED: No account found for '{form_data.username}'")
+        raise HTTPException(status_code=400, detail="Incorrect username, email, or WhatsApp number.")
+
+    # 3. Verify Password
+    if not auth.verify_password(form_data.password, db_doctor.hashed_password):
+        print(f"❌ LOGIN FAILED: Incorrect password for {db_doctor.username}")
+        raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    # 4. Success Log
+    print(f"✅ LOGIN SUCCESS: Authenticated as {db_doctor.username} (ID: {db_doctor.id})")
+    
     # Create an access token
     access_token = auth.create_access_token(data={"sub": db_doctor.username})
-    return {"message":"Successfully logged in","access_token": access_token, "token_type": "bearer"}
+    
+    print("--- 🔐 LOGIN DEBUG COMPLETE 🔐 ---\n")
+    return {
+        "message": "Successfully logged in",
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "username": db_doctor.username # Useful for frontend to store
+    }
 
 @app.post("/doctor/forgot-password")
 def forgot_password(request: passwordResetRequest, session: Session = Depends(get_db)):
