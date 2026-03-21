@@ -19,9 +19,6 @@ import auth
 import database as db
 from database import get_db
 
-
-load_dotenv()
-
 app = FastAPI(title="Doctor Appointment System")
 
 app.add_middleware(
@@ -333,8 +330,8 @@ async def approve_appointment(appointment_id: int, current_doctor: db.Doctor = D
         
         send_whatsapp_confirmation(
             phone_number=phone, # Use the cleaned phone variable
-            client_name=apt.client_name,
             doctor_name=display_name,
+            client_name=apt.client_name,
             date=date_str,
             time=time_str
         )
