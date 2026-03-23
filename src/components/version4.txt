@@ -1,0 +1,1231 @@
+import { useState, useEffect } from 'react';
+import { Calendar, Clock, Mail, Phone, User, Loader2, MapPin, CheckCircle, ShieldCheck } from 'lucide-react';
+import { BACKEND_URL } from '../config';
+
+type FormState = 'idle' | 'submitting' | 'success' | 'error';
+type GeoState = 'pending' | 'detecting' | 'granted' | 'denied';
+type OtpState = 'idle' | 'sending' | 'sent' | 'verifying' | 'verified';
+
+function getBrowserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+export default function BookingForm({ doctorUsername }: { doctorUsername: string }) {
+  const [geoState, setGeoState] = useState<GeoState>('pending');
+  const [timezone, setTimezone] = useState<string>('');
+  const [formState, setFormState] = useState<FormState>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // OTP State
+  const [otpState, setOtpState] = useState<OtpState>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+
+  const [formData, setFormData] = useState({
+    client_name: '',
+    client_email: '',
+    mobile_no: '',
+    slot_date: '',
+    slot_time: '',
+  });
+
+  useEffect(() => {
+    // We still ask for permission for the UI/UX experience
+    if (navigator.geolocation) {
+      setGeoState('detecting');
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setTimezone('Asia/Kolkata'); // Hardcode to India
+          setGeoState('granted');
+        },
+        () => {
+          setTimezone('Asia/Kolkata');
+          setGeoState('denied');
+        }
+      );
+    } else {
+      setTimezone('Asia/Kolkata');
+      setGeoState('denied');
+    }
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  // OTP Handlers
+  const handleSendOtp = async () => {
+    if (!formData.mobile_no) {
+      setOtpError('Please enter a WhatsApp number first.');
+      return;
+    }
+    setOtpState('sending');
+    setOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/sendotp?phone_number=${encodeURIComponent(formData.mobile_no)}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setOtpState('sent');
+      } else {
+        const data = await res.json();
+        setOtpError(data.detail || 'Failed to send OTP');
+        setOtpState('idle');
+      }
+    } catch {
+      setOtpError('Network error connecting to backend.');
+      setOtpState('idle');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode) return;
+    setOtpState('verifying');
+    setOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/verify_otp?phone_number=${encodeURIComponent(formData.mobile_no)}&otp=${encodeURIComponent(otpCode)}`);
+      if (res.ok) {
+        setOtpState('verified');
+      } else {
+        const data = await res.json();
+        setOtpError(data.detail || 'Invalid OTP');
+        setOtpState('sent');
+      }
+    } catch {
+      setOtpError('Network error connecting to backend.');
+      setOtpState('sent');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpState !== 'verified') {
+      setErrorMsg('Please verify your WhatsApp number first.');
+      return;
+    }
+
+    setFormState('submitting');
+    const isoSlotTime = `${formData.slot_date}T${formData.slot_time}:00`;
+
+    const payload = {
+      client_name: formData.client_name,
+      client_email: formData.client_email,
+      mobile_no: formData.mobile_no,
+      slot_time: isoSlotTime,
+      user_timezone: "Asia/Kolkata"
+    };
+
+    try {
+      // Dynamic Doctor Routing API
+      const response = await fetch(`${BACKEND_URL}/book/${doctorUsername}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setFormState('success');
+      } else {
+        setErrorMsg(data.detail || 'Submission failed.');
+        setFormState('error');
+      }
+    } catch {
+      setErrorMsg('Cannot connect to server. Please ensure the backend is running.');
+      setFormState('error');
+    }
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // ── Success screen ──
+  if (formState === 'success') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center px-4 py-12">
+        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10 max-w-md w-full text-center">
+          <div className="text-5xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
+          <p className="text-gray-500 mb-6 leading-relaxed">
+            Your appointment request is pending Doctor's approval.<br />
+            You'll receive a Google Calendar invite once confirmed.
+          </p>
+          <button
+            onClick={() => {
+              setFormState('idle');
+              setOtpState('idle');
+              setOtpCode('');
+              setFormData({ client_name: '', client_email: '', mobile_no: '', slot_date: '', slot_time: '' });
+            }}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition"
+          >
+            Book Another
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main form ──
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 py-12 px-4 sm:px-6">
+      <div className="max-w-2xl mx-auto">
+
+        <div className="text-center mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Book Your Appointment</h1>
+          <p className="text-gray-600">Requesting slot with: <span className="font-semibold text-blue-700">@{doctorUsername}</span></p>
+        </div>
+
+        <div className={`mb-6 px-4 py-3 rounded-xl flex items-start sm:items-center gap-3 text-sm font-medium border ${
+          geoState === 'detecting' ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+            : geoState === 'granted' ? 'bg-green-50 border-green-200 text-green-700'
+            : 'bg-orange-50 border-orange-200 text-orange-700'
+        }`}>
+          <MapPin size={18} className="flex-shrink-0 mt-0.5 sm:mt-0" />
+          <span className="leading-tight">
+            {geoState === 'pending' && 'Waiting for location permission…'}
+            {geoState === 'detecting' && 'Detecting your location for accurate scheduling…'}
+            {geoState === 'granted' && `📍 Location confirmed — scheduling in: ${timezone}`}
+            {geoState === 'denied' && `⚠ Location access denied — using browser timezone: ${timezone || getBrowserTimezone()}`}
+          </span>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center gap-2"><User size={18} /> Full Name</div>
+                </label>
+                <input
+                  type="text" name="client_name" required
+                  value={formData.client_name} onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                  placeholder="Enter your full name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center gap-2"><Mail size={18} /> Email Address</div>
+                </label>
+                <input
+                  type="email" name="client_email" required
+                  value={formData.client_email} onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                  placeholder="your.email@example.com"
+                />
+              </div>
+            </div>
+
+            {/* OTP VERIFICATION SECTION */}
+            <div className="bg-blue-50/50 p-4 sm:p-5 rounded-xl border border-blue-100">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="flex items-center gap-2"><Phone size={18} /> WhatsApp Number</div>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <input
+                  type="tel" name="mobile_no" required
+                  disabled={otpState === 'verified' || otpState === 'sent'}
+                  value={formData.mobile_no} onChange={handleChange}
+                  className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition disabled:bg-gray-100"
+                  placeholder="e.g. 919876543210"
+                />
+                
+                {otpState === 'idle' && (
+                  <button type="button" onClick={handleSendOtp} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition whitespace-nowrap">
+                    Verify
+                  </button>
+                )}
+                {otpState === 'sending' && (
+                  <button type="button" disabled className="w-full sm:w-auto bg-blue-400 text-white px-6 py-3 rounded-lg font-medium flex justify-center items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> Sending
+                  </button>
+                )}
+                {otpState === 'verified' && (
+                  <div className="w-full sm:w-auto bg-green-100 text-green-700 px-6 py-3 rounded-lg font-medium flex justify-center items-center gap-2">
+                    <ShieldCheck size={20} /> Verified
+                  </div>
+                )}
+              </div>
+
+              {(otpState === 'sent' || otpState === 'verifying') && (
+                <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2">
+                  <input
+                    type="text" placeholder="Enter 6-digit OTP"
+                    value={otpCode} onChange={e => setOtpCode(e.target.value)}
+                    className="flex-1 w-full px-4 py-3 rounded-lg border border-blue-300 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button type="button" onClick={handleVerifyOtp} disabled={otpState === 'verifying'} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition flex justify-center items-center gap-2">
+                      {otpState === 'verifying' ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={18} />}
+                      Confirm
+                    </button>
+                    <button type="button" onClick={() => {setOtpState('idle'); setOtpCode('');}} className="flex-1 sm:flex-none text-gray-500 hover:text-gray-700 px-4 py-3 text-sm underline bg-white sm:bg-transparent rounded-lg border border-gray-200 sm:border-none">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {otpError && <p className="text-red-500 text-sm mt-2 font-medium">{otpError}</p>}
+            </div>
+
+            {/* Separate Date + Time pickers */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center gap-2"><Calendar size={18} /> Preferred Date</div>
+                </label>
+                <input
+                  type="date" name="slot_date" required
+                  value={formData.slot_date} min={today}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center gap-2"><Clock size={18} /> Preferred Time</div>
+                </label>
+                <input
+                  type="time" name="slot_time" required
+                  value={formData.slot_time}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                />
+              </div>
+            </div>
+
+            {formState === 'error' && (
+              <div className="p-4 rounded-lg border bg-red-50 text-red-800 border-red-200 text-sm">
+                ⚠ {errorMsg}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={formState === 'submitting' || otpState !== 'verified'}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg disabled:cursor-not-allowed"
+            >
+              {formState === 'submitting' ? (
+                <><Loader2 className="animate-spin" size={20} /> Submitting…</>
+              ) : otpState !== 'verified' ? (
+                'Verify WhatsApp to Book'
+              ) : (
+                'Request Appointment'
+              )}
+            </button>
+
+          </form>
+        </div>
+
+        <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 px-2 text-sm font-medium">
+          <button onClick={() => (window as any).navigate('/doctor-login')} className="text-blue-600 hover:text-blue-700 bg-white sm:bg-transparent py-2 px-4 sm:p-0 rounded-lg w-full sm:w-auto shadow-sm sm:shadow-none border sm:border-none">
+            Doctor Login →
+          </button>
+          <button onClick={() => (window as any).navigate('/doctor-register')} className="text-blue-600 hover:text-blue-700 bg-white sm:bg-transparent py-2 px-4 sm:p-0 rounded-lg w-full sm:w-auto shadow-sm sm:shadow-none border sm:border-none">
+            Register Clinic →
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+import { useEffect, useState } from "react";
+import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink, Link } from "lucide-react";
+import { BACKEND_URL } from "../config";
+
+type Appointment = {
+  id: number;
+  client_name: string;
+  client_email: string;
+  whatsapp_no: string;
+  slot_time: string;
+  booking_date?: string;
+  booking_Date?: string;
+  is_approved: boolean;
+  google_calendar_link?: string;
+};
+
+export default function DoctorDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
+  const [isApproving, setIsApproving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"pending" | "approved">("pending");
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const [editingAppt, setEditingAppt] = useState<Appointment | null>(null);
+  const [editForm, setEditForm] = useState({ date: "", time: "" });
+
+  const authHeaders = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`
+  };
+
+  const showToast = (msg: string, ok: boolean) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // --- Google Connect Function ---
+  const handleConnectGoogle = () => {
+    const username = localStorage.getItem("username");
+
+    if (!username) {
+      alert("Error: Username not found. Please log out and log back in.");
+      return;
+    }
+
+    // Using window.location.href avoids pop-up blockers and handles the backend redirect smoothly
+    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
+    window.location.href = authUrl; 
+  };
+
+  const fetchAppointments = async (tab: "pending" | "approved") => {
+    setIsLoading(true);
+    try {
+      const endpoint = tab === "approved"
+        ? `${BACKEND_URL}/doctor/approved`
+        : `${BACKEND_URL}/doctor/pendingappointments`;
+
+      const res = await fetch(endpoint, { headers: authHeaders });
+      if (res.status === 401) {
+        onLogout();
+        return;
+      }
+
+      const data = await res.json();
+      setAppointments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setAppointments([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments(activeTab);
+  }, [activeTab]);
+
+  const approveAppt = async (id: number) => {
+    setIsApproving(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/approve/${id}`, {
+        method: "POST",
+        headers: authHeaders
+      });
+      const result = await res.json();
+      if (res.ok) {
+        showToast(`✓ ${result.client} approved! Calendar invite sent.`, true);
+        await fetchAppointments(activeTab);
+      } else {
+        // This catches the "Please connect Google Calendar" error from the backend
+        showToast(result.detail || "Approval failed.", false);
+      }
+    } catch {
+      showToast("Approval failed. Check backend connection.", false);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const deleteAppt = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this appointment?")) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/delete/${id}`, {
+        method: "DELETE",
+        headers: authHeaders
+      });
+      if (res.ok) {
+        showToast("✓ Appointment deleted successfully.", true);
+        await fetchAppointments(activeTab);
+      } else {
+        showToast("Failed to delete appointment.", false);
+      }
+    } catch {
+      showToast("Delete failed. Check backend connection.", false);
+    }
+  };
+
+  const openEditModal = (apt: Appointment) => {
+    setEditingAppt(apt);
+    const actualDate = apt.booking_date || apt.booking_Date || "";
+    setEditForm({ date: actualDate, time: apt.slot_time || "" });
+  };
+
+  const submitEdit = async () => {
+    if (!editingAppt) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/updateappointment/${editingAppt.id}`, {
+        method: "PATCH",
+        headers: authHeaders,
+        body: JSON.stringify({
+          booking_date: editForm.date,
+          slot_time: editForm.time,
+        }),
+      });
+
+      if (res.ok) {
+        showToast("✓ Appointment updated successfully.", true);
+        setEditingAppt(null);
+        await fetchAppointments(activeTab);
+      } else {
+        showToast("Failed to update appointment.", false);
+      }
+    } catch {
+      showToast("Update failed. Check backend connection.", false);
+    }
+  };
+
+  const formatDateTime = (dateVal: string, slot_time: string) => {
+    try {
+      if (!dateVal || !slot_time) throw new Error("Missing data");
+      const dt = new Date(`${dateVal}T${slot_time}`);
+      if (isNaN(dt.getTime())) throw new Error("Invalid");
+      return {
+        dateStr: dt.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+        timeStr: dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+      };
+    } catch {
+      return { dateStr: dateVal || "—", timeStr: slot_time || "—" };
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-12">
+      {toast && (
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-5 py-3 rounded-xl shadow-lg text-sm font-medium font-mono text-center transition-all ${toast.ok ? "bg-green-700 text-white" : "bg-red-700 text-white"
+          }`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Main Header */}
+      <div className="bg-white shadow-md border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="text-center sm:text-left">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Medical Portal</h1>
+            <p className="text-gray-600 mt-1 text-sm sm:text-base">Appointment Management Dashboard</p>
+          </div>
+          <button onClick={onLogout} className="w-full sm:w-auto text-red-600 hover:text-red-700 font-semibold flex items-center justify-center gap-2 bg-red-50 px-6 py-2.5 rounded-lg border border-red-100 hover:bg-red-100 transition">
+            <LogOut size={18} /> Logout
+          </button>
+        </div>
+      </div>
+
+      {/* --- NEW: Google Calendar Connect Banner --- */}
+      <div className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h3 className="text-blue-900 text-lg font-bold flex items-center justify-center sm:justify-start gap-2">
+              <Calendar size={20} className="text-blue-600" /> Google Calendar Integration
+            </h3>
+            <p className="text-blue-700 text-sm mt-1 text-center sm:text-left">
+              Connect your workspace account to automatically sync appointments and send invites.
+            </p>
+          </div>
+          <button
+            onClick={handleConnectGoogle}
+            className="w-full sm:w-auto bg-white text-blue-600 border border-blue-600 hover:bg-blue-600 hover:text-white px-6 py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Link size={18} /> Connect Calendar
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+
+          {/* Navigation Tabs */}
+          <div className="border-b border-gray-200">
+            <nav className="flex flex-col sm:flex-row">
+              {(["pending", "approved"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 px-4 py-4 text-center font-medium transition ${activeTab === tab ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    {tab === "pending" ? <Clock size={20} /> : <CheckCircle size={20} />}
+                    {tab === "pending" ? "Pending Requests" : "Approved Appointments"}
+                  </div>
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Loaders & Modals (Hidden by default) */}
+          {isApproving && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 text-center max-w-sm w-full">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" />
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Approving Appointment</h3>
+                  <p className="text-gray-500">Syncing with Google Calendar…</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {editingAppt && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Reschedule Appointment</h3>
+                <p className="text-gray-600 mb-6">Editing for: <span className="font-semibold">{editingAppt.client_name}</span></p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>
+                    <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Time</label>
+                    <input type="time" step="1" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600" />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-end gap-3 mt-8">
+                  <button onClick={() => setEditingAppt(null)} className="w-full sm:w-auto px-6 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition">Cancel</button>
+                  <button onClick={submitEdit} className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">Save Changes</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Appointments List */}
+          <div className="p-4 sm:p-6">
+            {isLoading ? (
+              <div className="text-center py-12">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" />
+                <p className="mt-4 text-gray-600">Loading appointments…</p>
+              </div>
+            ) : appointments.length === 0 ? (
+              <div className="text-center py-12">
+                <XCircle size={48} className="mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-600 text-lg">No {activeTab} appointments found</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {appointments.map((apt) => {
+                  const actualDate = apt.booking_date || apt.booking_Date || "";
+                  const { dateStr, timeStr } = formatDateTime(actualDate, apt.slot_time);
+
+                  return (
+                    <div key={apt.id} className="border border-gray-200 rounded-lg p-5 sm:p-6 hover:shadow-md transition">
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <User size={20} className="text-gray-500 flex-shrink-0 mt-0.5" />
+                            <p className="font-semibold text-gray-900 text-lg leading-tight">{apt.client_name}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Mail size={18} className="text-gray-500 flex-shrink-0" />
+                            <p className="text-gray-700 truncate">{apt.client_email}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Phone size={18} className="text-gray-500 flex-shrink-0" />
+                            <p className="text-gray-700">{apt.whatsapp_no}</p>
+                          </div>
+                          <div className="flex items-start sm:items-center gap-3">
+                            <Calendar size={18} className="text-gray-500 flex-shrink-0 mt-0.5 sm:mt-0" />
+                            <div className="flex flex-col sm:flex-row sm:gap-2 sm:items-center">
+                              <p className="text-gray-900 font-medium">{dateStr}</p>
+                              <span className="hidden sm:inline text-gray-400">•</span>
+                              <p className="text-gray-600 text-sm sm:text-base">{timeStr}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4 lg:pt-0 border-t lg:border-none border-gray-100">
+                          {activeTab === "pending" && (
+                            <>
+                              <button onClick={() => approveAppt(apt.id)} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2"><CheckCircle size={18} />Approve</button>
+                              <button onClick={() => openEditModal(apt)} className="flex-1 sm:flex-none bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2"><Edit size={18} />Edit</button>
+                            </>
+                          )}
+
+                          {activeTab === "approved" && (
+                            <>
+                              <span className="w-full sm:w-auto bg-green-100 text-green-800 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 h-fit">
+                                <CheckCircle size={16} />Confirmed
+                              </span>
+
+                              {/* The Specific Google Event Link Button */}
+                              {apt.google_calendar_link && (
+                                <a
+                                  href={apt.google_calendar_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 px-4 py-2.5 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 h-fit"
+                                >
+                                  <ExternalLink size={16} /> Show Appointment
+                                </a>
+                              )}
+                            </>
+                          )}
+
+                          <button onClick={() => deleteAppt(apt.id)} className="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2 h-fit">
+                            <Trash2 size={18} />Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+import { useState } from 'react';
+import { Loader2, KeyRound, UserCircle, ArrowLeft, Phone, ShieldCheck, Lock, CheckCircle } from 'lucide-react';
+import { BACKEND_URL } from '../config';
+
+export default function DoctorLogin({
+  onLoginSuccess,
+  onNavigateRegister
+}: {
+  onLoginSuccess: (token: string) => void;
+  onNavigateRegister: () => void;
+}) {
+  // --- View State ---
+  const [view, setView] = useState<'login' | 'forgot'>('login');
+
+  // --- Login State ---
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+
+  // --- Forgot Password State ---
+  const [resetMobile, setResetMobile] = useState('');
+  const [resetOtpState, setResetOtpState] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'verified'>('idle');
+  const [resetOtpCode, setResetOtpCode] = useState('');
+  const [resetOtpError, setResetOtpError] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [isResetLoading, setIsResetLoading] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  // ==========================================
+  // LOGIN LOGIC
+  // ==========================================
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoginLoading(true);
+    setLoginError('');
+
+    const params = new URLSearchParams();
+    params.append('username', identifier);
+    params.append('password', password);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        onLoginSuccess(data.access_token);
+      } else {
+        setLoginError(data.detail || 'Invalid credentials');
+      }
+    } catch {
+      setLoginError('Network error connecting to backend.');
+    } finally {
+      setIsLoginLoading(false);
+    }
+  };
+
+  // ==========================================
+  // FORGOT PASSWORD LOGIC
+  // ==========================================
+  const handleSendResetOtp = async () => {
+    if (!resetMobile) { setResetOtpError('Enter WhatsApp number'); return; }
+    setResetOtpState('sending'); setResetOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/sendotp?phone_number=${encodeURIComponent(resetMobile)}`, { method: 'POST' });
+      if (res.ok) setResetOtpState('sent');
+      else setResetOtpError('Failed to send OTP');
+    } catch {
+      setResetOtpError('Network error'); setResetOtpState('idle');
+    }
+  };
+
+  const handleVerifyResetOtp = async () => {
+    if (!resetOtpCode) return;
+    setResetOtpState('verifying'); setResetOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/verify_otp?phone_number=${encodeURIComponent(resetMobile)}&otp=${encodeURIComponent(resetOtpCode)}`);
+      if (res.ok) setResetOtpState('verified');
+      else { setResetOtpError('Invalid OTP'); setResetOtpState('sent'); }
+    } catch {
+      setResetOtpError('Network error'); setResetOtpState('sent');
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmNewPassword) {
+      setResetError('Passwords do not match!');
+      return;
+    }
+
+    setIsResetLoading(true);
+    setResetError('');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: resetMobile,
+          otp: resetOtpCode,        // Sending the OTP for backend security check
+          password: newPassword     // Changing to "password" instead of "new_password"
+        })
+      });
+
+      if (res.ok) {
+        setResetSuccess(true);
+      } else {
+        const data = await res.json();
+        setResetError(data.detail || 'Failed to reset password');
+      }
+    } catch {
+      setResetError('Network error connecting to backend.');
+    } finally {
+      setIsResetLoading(false);
+    }
+  };
+
+  // ==========================================
+  // RENDER: FORGOT PASSWORD VIEW
+  // ==========================================
+  if (view === 'forgot') {
+    if (resetSuccess) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center animate-in fade-in zoom-in-95">
+            <div className="text-green-500 mb-4 flex justify-center"><CheckCircle size={60} /></div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Password Reset!</h2>
+            <p className="text-gray-600 mb-6 text-sm">You can now login with your new password.</p>
+            <button onClick={() => { setView('login'); setResetSuccess(false); setIdentifier(resetMobile); setPassword(''); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition shadow-md">
+              Back to Login
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4">
+
+          <button onClick={() => setView('login')} className="text-gray-500 hover:text-gray-800 flex items-center gap-2 text-sm font-medium transition">
+            <ArrowLeft size={16} /> Back to Login
+          </button>
+
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Reset Password</h1>
+            <p className="text-sm text-gray-500">Verify your registered WhatsApp number to create a new password.</p>
+          </div>
+
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-5">
+            {/* Step 1: Verify Phone */}
+            <div className="bg-blue-50/50 p-4 sm:p-5 rounded-xl border border-blue-100">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Phone size={16} /> WhatsApp Number
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <input
+                  type="tel" required disabled={resetOtpState === 'verified' || resetOtpState === 'sent'}
+                  value={resetMobile} onChange={e => setResetMobile(e.target.value)}
+                  className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-white/50"
+                  placeholder="919876543210"
+                />
+
+                {resetOtpState === 'idle' && (
+                  <button type="button" onClick={handleSendResetOtp} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-medium transition whitespace-nowrap">Verify</button>
+                )}
+                {resetOtpState === 'sending' && (
+                  <button type="button" disabled className="w-full sm:w-auto bg-blue-400 text-white px-5 py-3 rounded-lg flex justify-center items-center gap-2"><Loader2 size={16} className="animate-spin" /></button>
+                )}
+                {resetOtpState === 'verified' && (
+                  <div className="w-full sm:w-auto bg-green-100 text-green-700 px-5 py-3 rounded-lg font-medium flex justify-center items-center gap-2"><ShieldCheck size={20} /> Verified</div>
+                )}
+              </div>
+
+              {(resetOtpState === 'sent' || resetOtpState === 'verifying') && (
+                <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2">
+                  <input type="text" placeholder="6-digit OTP" value={resetOtpCode} onChange={e => setResetOtpCode(e.target.value)} className="flex-1 w-full px-4 py-3 rounded-lg border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" onClick={handleVerifyResetOtp} disabled={resetOtpState === 'verifying'} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition flex justify-center items-center">
+                    {resetOtpState === 'verifying' ? <Loader2 size={16} className="animate-spin" /> : 'Confirm'}
+                  </button>
+                </div>
+              )}
+              {resetOtpError && <p className="text-red-500 text-sm mt-2 font-medium">{resetOtpError}</p>}
+            </div>
+
+            {/* Step 2: New Password (Only visible after OTP is verified) */}
+            {resetOtpState === 'verified' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16} /> New Password</label>
+                  <input
+                    type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    placeholder="Create new password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2"><Lock size={16} /> Confirm Password</label>
+                  <input
+                    type="password" required value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+                    placeholder="Repeat new password"
+                  />
+                </div>
+              </div>
+            )}
+
+            {resetError && <div className="text-red-600 text-sm text-center font-medium bg-red-50 py-2 rounded-md border border-red-100">{resetError}</div>}
+
+            <button
+              type="submit"
+              disabled={isResetLoading || resetOtpState !== 'verified'}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 mt-4"
+            >
+              {isResetLoading ? <Loader2 className="animate-spin" size={20} /> : 'Save New Password'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // RENDER: LOGIN VIEW
+  // ==========================================
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 space-y-8 animate-in fade-in zoom-in-95">
+
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Clinic Login</h1>
+          <p className="text-sm text-gray-500">Access your appointment dashboard</p>
+        </div>
+
+        <form onSubmit={handleLoginSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <UserCircle size={16} className="text-gray-400" />
+              Username or Number or Email
+            </label>
+            <input
+              type="text" required
+              value={identifier} onChange={e => setIdentifier(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+              placeholder="Enter your login ID"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
+                <KeyRound size={16} className="text-gray-400" />
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setView('forgot')}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+              >
+                Forgot password?
+              </button>
+            </div>
+            <input
+              type="password" required
+              value={password} onChange={e => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition"
+              placeholder="Enter password"
+            />
+          </div>
+
+          {loginError && <div className="text-red-700 text-sm text-center font-medium bg-red-50 py-2 rounded-md border border-red-100">{loginError}</div>}
+
+          <button
+            type="submit" disabled={isLoginLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl transition shadow-md flex justify-center items-center gap-2 disabled:opacity-70"
+          >
+            {isLoginLoading ? <Loader2 className="animate-spin" size={20} /> : 'Secure Login'}
+          </button>
+        </form>
+
+        <div className="text-center text-sm text-gray-600 border-t pt-6">
+          Don't have an account?{' '}
+          <button onClick={onNavigateRegister} className="text-blue-600 hover:text-blue-800 hover:underline font-semibold transition">
+            Register your clinic
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+import { useState } from 'react';
+import { Loader2, Phone, ShieldCheck, CheckCircle, User, Mail, Lock, Building2, Copy } from 'lucide-react';
+import { BACKEND_URL } from '../config';
+
+export default function DoctorRegister({ onNavigateLogin }: { onNavigateLogin: () => void }) {
+  const [formData, setFormData] = useState({ 
+    full_name: '', // Added full_name to match backend
+    username: '', 
+    email: '', 
+    whatsapp_no: '', 
+    password: '', 
+    confirm_password: '' 
+  });
+  const [error, setError] = useState('');
+  const [successLink, setSuccessLink] = useState(''); // Stores the generated booking link
+  const [isLoading, setIsLoading] = useState(false);
+
+  // OTP State
+  const [otpState, setOtpState] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'verified'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState('');
+
+  const handleSendOtp = async () => {
+    if (!formData.whatsapp_no) { setOtpError('Enter mobile number'); return; }
+    setOtpState('sending'); setOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/sendotp?phone_number=${encodeURIComponent(formData.whatsapp_no)}`, { method: 'POST' });
+      if (res.ok) setOtpState('sent');
+      else setOtpError('Failed to send OTP');
+    } catch {
+      setOtpError('Network error'); setOtpState('idle');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode) return;
+    setOtpState('verifying'); setOtpError('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/verify_otp?phone_number=${encodeURIComponent(formData.whatsapp_no)}&otp=${encodeURIComponent(otpCode)}`);
+      if (res.ok) setOtpState('verified');
+      else { setOtpError('Invalid OTP'); setOtpState('sent'); }
+    } catch {
+      setOtpError('Network error'); setOtpState('sent');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== formData.confirm_password) {
+      setError("Passwords do not match!");
+      return;
+    }
+    if (otpState !== 'verified') {
+      setError('Please verify your WhatsApp number first.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/doctor/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: formData.full_name, // Sent to backend
+          username: formData.username,
+          email: formData.email,
+          whatsapp_no: formData.whatsapp_no,
+          password: formData.password,
+          confirm_password: formData.confirm_password
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessLink(data.booking_link); // Capture the link for the success screen
+      } else {
+        setError(data.detail || 'Registration failed');
+      }
+    } catch {
+      setError('Network error connecting to backend.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- SUCCESS CONFIRMATION SCREEN ---
+  if (successLink) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-8 px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 text-center animate-in zoom-in-95 duration-300">
+          <div className="text-green-500 mb-6 flex justify-center">
+            <div className="bg-green-50 p-4 rounded-full">
+              <CheckCircle size={64} className="text-green-500" />
+            </div>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-3">Registration Complete!</h2>
+          <p className="text-gray-500 mb-8 text-sm sm:text-base leading-relaxed">
+            Welcome, <strong>{formData.full_name}</strong>. Your clinic is now registered and ready to accept appointments.
+          </p>
+          
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 text-left">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Custom Booking Link</p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-mono text-blue-600 break-all bg-blue-50 p-2 rounded flex-1">
+                {successLink}
+              </p>
+              <button 
+                onClick={() => navigator.clipboard.writeText(successLink)}
+                className="text-gray-400 hover:text-gray-600 transition"
+                title="Copy Link"
+              >
+                <Copy size={20} />
+              </button>
+            </div>
+          </div>
+
+          <button onClick={onNavigateLogin} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-200 active:scale-[0.98]">
+            Proceed to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- REGISTRATION FORM ---
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center py-10 px-4 sm:px-6">
+      <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="p-6 sm:p-10">
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mb-2 text-center">Create Account</h1>
+          <p className="text-gray-500 text-center text-sm sm:text-base mb-8">Register your clinic to start accepting bookings</p>
+          
+          <form onSubmit={handleSubmit} className="space-y-5">
+            
+            {/* ADDED: Full Name Field */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Building2 size={14}/> Clinic / Doctor Name</label>
+              <input
+                type="text" required
+                value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50 focus:bg-white"
+                placeholder="e.g. Dr. Smith Dental"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><User size={14}/> Username</label>
+                <input
+                  type="text" required
+                  value={formData.username} onChange={e => setFormData({...formData, username: e.target.value.toLowerCase().replace(/\s/g, '_')})}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50 focus:bg-white"
+                  placeholder="e.g. city_dental"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Mail size={14}/> Email</label>
+                <input
+                  type="email" required
+                  value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50 focus:bg-white"
+                  placeholder="dr@example.com"
+                />
+              </div>
+            </div>
+
+            {/* WhatsApp OTP Section - Made Fully Responsive */}
+            <div className="bg-blue-50/50 p-4 sm:p-5 rounded-2xl border border-blue-100 space-y-3">
+              <label className="block text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Phone size={14} /> WhatsApp Verification
+              </label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="tel" required disabled={otpState === 'verified' || otpState === 'sent'}
+                  value={formData.whatsapp_no} onChange={e => setFormData({...formData, whatsapp_no: e.target.value})}
+                  className="flex-1 w-full px-4 py-3 rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-white/60 bg-white"
+                  placeholder="919876543210"
+                />
+                
+                {otpState === 'idle' && (
+                  <button type="button" onClick={handleSendOtp} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-bold transition-all hover:bg-blue-700 active:scale-95 shadow-sm">Verify</button>
+                )}
+                {otpState === 'sending' && (
+                  <button type="button" disabled className="w-full sm:w-auto bg-blue-400 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin" /></button>
+                )}
+                {otpState === 'verified' && (
+                  <div className="w-full sm:w-auto bg-green-100 text-green-700 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 border border-green-200"><ShieldCheck size={20} /> <span className="sm:hidden">Verified</span></div>
+                )}
+              </div>
+
+              {(otpState === 'sent' || otpState === 'verifying') && (
+                <div className="flex flex-col sm:flex-row gap-3 pt-2 animate-in fade-in slide-in-from-top-2">
+                  <input type="text" placeholder="6-digit OTP" value={otpCode} onChange={e => setOtpCode(e.target.value)} className="flex-1 w-full px-4 py-3 rounded-xl border border-blue-300 outline-none bg-white focus:ring-2 focus:ring-blue-500"/>
+                  <button type="button" onClick={handleVerifyOtp} disabled={otpState === 'verifying'} className="w-full sm:w-auto bg-green-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-green-700 transition-all active:scale-95 flex justify-center items-center gap-2 shadow-sm">
+                    {otpState === 'verifying' ? <Loader2 size={18} className="animate-spin" /> : 'Confirm'}
+                  </button>
+                </div>
+              )}
+              {otpError && <p className="text-red-500 text-xs font-semibold mt-1">{otpError}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Lock size={14}/> Password</label>
+                <input
+                  type="password" required
+                  value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50 focus:bg-white"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Lock size={14}/> Confirm</label>
+                <input
+                  type="password" required
+                  value={formData.confirm_password} onChange={e => setFormData({...formData, confirm_password: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none transition bg-gray-50/50 focus:bg-white"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {error && <div className="text-red-600 text-sm font-semibold bg-red-50 p-3 rounded-xl border border-red-100 text-center animate-in zoom-in-95">{error}</div>}
+            
+            <button
+              type="submit"
+              disabled={isLoading || otpState !== 'verified'}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-50 disabled:shadow-none active:scale-[0.99] mt-4 flex items-center justify-center gap-2"
+            >
+              {isLoading ? <Loader2 className="animate-spin" size={24} /> : 'Complete Registration'}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center pt-6 border-t border-gray-100">
+            <p className="text-gray-500 text-sm">
+              Already a member?{' '}
+              <button onClick={onNavigateLogin} className="text-blue-600 hover:text-blue-800 font-bold hover:underline transition">Sign in here</button>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
