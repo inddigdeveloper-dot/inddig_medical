@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink, Link } from "lucide-react";
-import { BACKEND_URL } from "../config"; 
+import { BACKEND_URL } from "../config";
 
 type Appointment = {
   id: number;
   client_name: string;
   client_email: string;
-  whatsapp_no: string;   
-  slot_time: string;          
-  booking_date?: string; 
-  booking_Date?: string; 
+  whatsapp_no: string;
+  slot_time: string;
+  booking_date?: string;
+  booking_Date?: string;
   is_approved: boolean;
-  google_calendar_link?: string; 
+  google_calendar_link?: string;
 };
 
 export default function DoctorDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
@@ -37,9 +37,9 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   // --- NEW: Google Connect Function ---
   const handleConnectGoogle = () => {
     // Make sure 'username' was saved to localStorage during login
-    const username = localStorage.getItem("username") || ""; 
+    const username = localStorage.getItem("username") || "";
     const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
-    
+
     // Open in a popup window
     window.open(authUrl, "_blank", "width=600,height=700");
   };
@@ -47,16 +47,16 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   const fetchAppointments = async (tab: "pending" | "approved") => {
     setIsLoading(true);
     try {
-      const endpoint = tab === "approved" 
-        ? `${BACKEND_URL}/doctor/approved` 
+      const endpoint = tab === "approved"
+        ? `${BACKEND_URL}/doctor/approved`
         : `${BACKEND_URL}/doctor/pendingappointments`;
-        
+
       const res = await fetch(endpoint, { headers: authHeaders });
       if (res.status === 401) {
-        onLogout(); 
+        onLogout();
         return;
       }
-      
+
       const data = await res.json();
       setAppointments(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -70,6 +70,19 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   useEffect(() => {
     fetchAppointments(activeTab);
   }, [activeTab]);
+
+  const handleConnectGoogle = () => {
+    // Check if you are actually saving 'username' to localStorage during login!
+    const username = localStorage.getItem("username");
+
+    if (!username) {
+      alert("Error: Username not found. Please log out and log back in.");
+      return;
+    }
+
+    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
+    window.open(authUrl, "_blank", "width=600,height=700");
+  };
 
   const approveAppt = async (id: number) => {
     setIsApproving(true);
@@ -132,7 +145,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
       if (res.ok) {
         showToast("✓ Appointment updated successfully.", true);
         setEditingAppt(null);
-        await fetchAppointments(activeTab); 
+        await fetchAppointments(activeTab);
       } else {
         showToast("Failed to update appointment.", false);
       }
@@ -158,9 +171,8 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-12">
       {toast && (
-        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-5 py-3 rounded-xl shadow-lg text-sm font-medium font-mono text-center transition-all ${
-          toast.ok ? "bg-green-700 text-white" : "bg-red-700 text-white"
-        }`}>
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-5 py-3 rounded-xl shadow-lg text-sm font-medium font-mono text-center transition-all ${toast.ok ? "bg-green-700 text-white" : "bg-red-700 text-white"
+          }`}>
           {toast.msg}
         </div>
       )}
@@ -183,13 +195,13 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div>
             <h3 className="text-blue-900 text-lg font-bold flex items-center justify-center sm:justify-start gap-2">
-              <Calendar size={20} className="text-blue-600"/> Google Calendar Integration
+              <Calendar size={20} className="text-blue-600" /> Google Calendar Integration
             </h3>
             <p className="text-blue-700 text-sm mt-1 text-center sm:text-left">
               Connect your workspace account to automatically sync appointments and send invites.
             </p>
           </div>
-          <button 
+          <button
             onClick={handleConnectGoogle}
             className="w-full sm:w-auto bg-white text-blue-600 border border-blue-600 hover:bg-blue-600 hover:text-white px-6 py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2 shadow-sm"
           >
@@ -201,7 +213,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          
+
           {/* Navigation Tabs */}
           <div className="border-b border-gray-200">
             <nav className="flex flex-col sm:flex-row">
@@ -209,9 +221,8 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 px-4 py-4 text-center font-medium transition ${
-                    activeTab === tab ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                  }`}
+                  className={`flex-1 px-4 py-4 text-center font-medium transition ${activeTab === tab ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    }`}
                 >
                   <div className="flex items-center justify-center gap-2">
                     {tab === "pending" ? <Clock size={20} /> : <CheckCircle size={20} />}
@@ -240,15 +251,15 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
               <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md">
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Reschedule Appointment</h3>
                 <p className="text-gray-600 mb-6">Editing for: <span className="font-semibold">{editingAppt.client_name}</span></p>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">New Date</label>
-                    <input type="date" value={editForm.date} onChange={(e) => setEditForm({...editForm, date: e.target.value})} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600"/>
+                    <input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">New Time</label>
-                    <input type="time" step="1" value={editForm.time} onChange={(e) => setEditForm({...editForm, time: e.target.value})} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600"/>
+                    <input type="time" step="1" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-600" />
                   </div>
                 </div>
 
@@ -277,7 +288,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                 {appointments.map((apt) => {
                   const actualDate = apt.booking_date || apt.booking_Date || "";
                   const { dateStr, timeStr } = formatDateTime(actualDate, apt.slot_time);
-                  
+
                   return (
                     <div key={apt.id} className="border border-gray-200 rounded-lg p-5 sm:p-6 hover:shadow-md transition">
                       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -311,18 +322,18 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                               <button onClick={() => openEditModal(apt)} className="flex-1 sm:flex-none bg-blue-100 hover:bg-blue-200 text-blue-800 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2"><Edit size={18} />Edit</button>
                             </>
                           )}
-                          
+
                           {activeTab === "approved" && (
                             <>
                               <span className="w-full sm:w-auto bg-green-100 text-green-800 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 h-fit">
                                 <CheckCircle size={16} />Confirmed
                               </span>
-                              
+
                               {/* The Specific Google Event Link Button */}
                               {apt.google_calendar_link && (
-                                <a 
-                                  href={apt.google_calendar_link} 
-                                  target="_blank" 
+                                <a
+                                  href={apt.google_calendar_link}
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 hover:border-blue-300 px-4 py-2.5 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 h-fit"
                                 >
@@ -331,7 +342,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                               )}
                             </>
                           )}
-                          
+
                           <button onClick={() => deleteAppt(apt.id)} className="w-full sm:w-auto bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 px-4 py-2.5 rounded-lg font-semibold transition flex items-center justify-center gap-2 h-fit">
                             <Trash2 size={18} />Delete
                           </button>

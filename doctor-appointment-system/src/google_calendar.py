@@ -1,6 +1,7 @@
 import os
 import zoneinfo
 from datetime import datetime, timedelta
+from fastapi.responses import RedirectResponse 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from google_auth_oauthlib.flow import Flow
@@ -37,7 +38,7 @@ async def google_login(username: str):
         include_granted_scopes='true',
         state=username 
     )
-    return {"auth_uri": authorization_url}
+    return RedirectResponse
 
 @router.get("/auth/google/callback")
 async def google_callback(state: str, code: str, session: Session = Depends(get_db)):
