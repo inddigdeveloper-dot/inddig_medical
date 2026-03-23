@@ -20,7 +20,7 @@ def get_google_flow():
             "web": {
                 "client_id": os.getenv("CLIENT_ID"),
                 "client_secret": os.getenv("CLIENT_SECRET"),
-                "auth_uri": "https://acounts.google.com/o/oauth2/auth",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
         },
