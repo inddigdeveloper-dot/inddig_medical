@@ -34,14 +34,18 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
     setTimeout(() => setToast(null), 3500);
   };
 
-  // --- NEW: Google Connect Function ---
+  // --- Google Connect Function ---
   const handleConnectGoogle = () => {
-    // Make sure 'username' was saved to localStorage during login
-    const username = localStorage.getItem("username") || "";
-    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
+    const username = localStorage.getItem("username");
 
-    // Open in a popup window
-    window.open(authUrl, "_blank", "width=600,height=700");
+    if (!username) {
+      alert("Error: Username not found. Please log out and log back in.");
+      return;
+    }
+
+    // Using window.location.href avoids pop-up blockers and handles the backend redirect smoothly
+    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
+    window.location.href = authUrl; 
   };
 
   const fetchAppointments = async (tab: "pending" | "approved") => {
@@ -71,19 +75,6 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
     fetchAppointments(activeTab);
   }, [activeTab]);
 
-  const handleConnectGoogle = () => {
-    // Check if you are actually saving 'username' to localStorage during login!
-    const username = localStorage.getItem("username");
-
-    if (!username) {
-      alert("Error: Username not found. Please log out and log back in.");
-      return;
-    }
-
-    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
-    window.open(authUrl, "_blank", "width=600,height=700");
-  };
-
   const approveAppt = async (id: number) => {
     setIsApproving(true);
     try {
@@ -96,7 +87,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         showToast(`✓ ${result.client} approved! Calendar invite sent.`, true);
         await fetchAppointments(activeTab);
       } else {
-        // This will now catch the "Please connect Google Calendar" error from the backend
+        // This catches the "Please connect Google Calendar" error from the backend
         showToast(result.detail || "Approval failed.", false);
       }
     } catch {
