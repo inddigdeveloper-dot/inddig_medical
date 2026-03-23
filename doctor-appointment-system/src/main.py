@@ -2,7 +2,7 @@ import os
 import zoneinfo
 from datetime import datetime, timedelta, date, time
 
-from google_auth_oauthlib.flow import flow
+from google_auth_oauthlib.flow import Flow
 import json
 
 from scheduler import schedule_reminder, scheduler
