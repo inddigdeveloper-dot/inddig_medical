@@ -27,6 +27,10 @@ class Doctor(Base):
     full_name = Column(String, nullable=True) 
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=False, index=True)
+    
+    google_refresh_token = Column(String, nullable=True)
+    google_calendar_id = Column(String, default="primary")
+    
     whatsapp_no = Column(String, unique=False, index=True)
     hashed_password = Column(String)
     calendar_link = Column(String, nullable=True) 

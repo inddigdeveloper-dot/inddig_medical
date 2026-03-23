@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-// 1. ADDED 'ExternalLink' to the imports
-import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink } from "lucide-react";
+import { Calendar, CheckCircle, Clock, Mail, Phone, User, XCircle, Edit, Trash2, LogOut, ExternalLink, Link } from "lucide-react";
 import { BACKEND_URL } from "../config"; 
 
 type Appointment = {
@@ -12,7 +11,6 @@ type Appointment = {
   booking_date?: string; 
   booking_Date?: string; 
   is_approved: boolean;
-  // 2. ADDED the calendar link to the type definition
   google_calendar_link?: string; 
 };
 
@@ -34,6 +32,16 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // --- NEW: Google Connect Function ---
+  const handleConnectGoogle = () => {
+    // Make sure 'username' was saved to localStorage during login
+    const username = localStorage.getItem("username") || ""; 
+    const authUrl = `${BACKEND_URL}/auth/google/login?username=${username}`;
+    
+    // Open in a popup window
+    window.open(authUrl, "_blank", "width=600,height=700");
   };
 
   const fetchAppointments = async (tab: "pending" | "approved") => {
@@ -75,6 +83,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         showToast(`✓ ${result.client} approved! Calendar invite sent.`, true);
         await fetchAppointments(activeTab);
       } else {
+        // This will now catch the "Please connect Google Calendar" error from the backend
         showToast(result.detail || "Approval failed.", false);
       }
     } catch {
@@ -147,15 +156,16 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 pb-12">
       {toast && (
-        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-5 py-3 rounded-xl shadow-lg text-sm font-medium font-mono text-center ${
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm px-5 py-3 rounded-xl shadow-lg text-sm font-medium font-mono text-center transition-all ${
           toast.ok ? "bg-green-700 text-white" : "bg-red-700 text-white"
         }`}>
           {toast.msg}
         </div>
       )}
 
+      {/* Main Header */}
       <div className="bg-white shadow-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="text-center sm:text-left">
@@ -168,8 +178,31 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+      {/* --- NEW: Google Calendar Connect Banner --- */}
+      <div className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h3 className="text-blue-900 text-lg font-bold flex items-center justify-center sm:justify-start gap-2">
+              <Calendar size={20} className="text-blue-600"/> Google Calendar Integration
+            </h3>
+            <p className="text-blue-700 text-sm mt-1 text-center sm:text-left">
+              Connect your workspace account to automatically sync appointments and send invites.
+            </p>
+          </div>
+          <button 
+            onClick={handleConnectGoogle}
+            className="w-full sm:w-auto bg-white text-blue-600 border border-blue-600 hover:bg-blue-600 hover:text-white px-6 py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Link size={18} /> Connect Calendar
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          
+          {/* Navigation Tabs */}
           <div className="border-b border-gray-200">
             <nav className="flex flex-col sm:flex-row">
               {(["pending", "approved"] as const).map(tab => (
@@ -189,6 +222,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
             </nav>
           </div>
 
+          {/* Loaders & Modals (Hidden by default) */}
           {isApproving && (
             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 text-center max-w-sm w-full">
@@ -226,6 +260,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
             </div>
           )}
 
+          {/* Appointments List */}
           <div className="p-4 sm:p-6">
             {isLoading ? (
               <div className="text-center py-12">
@@ -283,7 +318,7 @@ export default function DoctorDashboard({ token, onLogout }: { token: string; on
                                 <CheckCircle size={16} />Confirmed
                               </span>
                               
-                              {/* 3. ADDED: Show Appointment Button */}
+                              {/* The Specific Google Event Link Button */}
                               {apt.google_calendar_link && (
                                 <a 
                                   href={apt.google_calendar_link} 

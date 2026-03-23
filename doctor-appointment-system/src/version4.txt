@@ -1,3 +1,289 @@
+import os 
+from datetime import datetime, timedelta, UTC
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+
+import database as db
+
+from database import get_db 
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY", "KABSDFJIKBSFKJ")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="doctor/login")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_doctor(
+    token: str = Depends(oauth2_scheme),
+    session: Session = Depends(get_db)  
+):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        
+        if username is None:
+            raise credentials_exception
+            
+    except JWTError:
+        raise credentials_exception
+
+    # Use lowercase .query()
+    doctor = session.query(db.Doctor).filter(db.Doctor.username == username).first()
+    
+    if doctor is None:
+        raise credentials_exception
+        
+    return doctor
+
+otp_storage = {}
+# config.py
+import os 
+from dotenv import load_dotenv
+
+# LOAD THE ENV FILE FIRST!
+load_dotenv()
+
+# 1. CORS Configuration
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://inddigdeveloper-dot.github.io"
+]
+
+# 2. Frontend Base URLs
+FRONTEND_BOOKING_BASE_URL = "https://inddigdeveloper-dot.github.io/inddig_medical/#/book"
+
+# 3. Third-Party API Endpoints
+AISENSY_API_URL = "https://backend.aisensy.com/campaign/t1/api/v2"
+AISENSY_API_KEY_WP = os.getenv("AISENSY_API_KEY_WP")
+AISENSY_API_KEY_OTP = os.getenv("AISENSY_API_KEY_OTP")
+AISENSY_API_KEY_REMINDER = os.getenv("AISENSY_API_KEY_REMINDER")
+import os
+from sqlalchemy import ForeignKey, create_engine,Integer, Date, Time, Column, String, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker,relationship,Session
+from datetime import datetime, UTC
+
+# now = datetime.now(UTC)
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL","sqlite:///./appointments.db")
+
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+
+if "sqlite" in SQLALCHEMY_DATABASE_URL:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
+SessionLocal = sessionmaker(autoflush=False, 
+                            autocommit = False, 
+                            bind = engine )
+
+Base = declarative_base()
+class Doctor(Base):
+    __tablename__="doctors"    
+    id = Column(Integer,primary_key=True, index=True)
+    full_name = Column(String, nullable=True) 
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=False, index=True)
+    
+    google_refresh_token = Column(String, nullable=True)
+    google_calendar_id = Column(String, default="primary")
+    
+    whatsapp_no = Column(String, unique=False, index=True)
+    hashed_password = Column(String)
+    calendar_link = Column(String, nullable=True) 
+    is_verified = Column(Boolean, default = False)
+    appointments = relationship("Appointment", back_populates="doctor")
+
+class Appointment(Base):
+    __tablename__="appointments"
+    id = Column(Integer, primary_key = True, index=True)
+
+    doctor_id = Column(Integer, ForeignKey("doctors.id"))
+    doctor = relationship("Doctor", back_populates="appointments")
+
+    client_name = Column(String)
+    client_email = Column(String, unique=True, index=True)
+    whatsapp_no = Column(String, unique=True, index=True)
+
+    user_timezone = Column(String, default="UTC")
+    # patient's booked time 
+    booking_date = Column(Date)
+    slot_time = Column(Time)
+    #it means it can be nullable because doctor also cant change and directly approves the apppointment
+    # approval status of the appointment
+    is_approved = Column(Boolean, default = False)
+    calendar_event_id = Column(String, nullable=True)
+    google_calendar_link = Column(String, nullable=True) # The HTML Link for the button
+    
+Base.metadata.create_all(bind=engine)
+def get_db():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+import requests
+
+# Make sure your FastAPI server is running on port 8000!
+BASE_URL = "http://127.0.0.1:8000"
+
+fake_doctors = [
+    {"username": "dr_vijay_dental", "password": "SecurePassword123!"},
+    {"username": "dr_sarah_cardio", "password": "HeartHealth2026"},
+    {"username": "dr_patel_peds", "password": "KidsCare#99"},
+    {"username": "dr_lee_derma", "password": "ClearSkin4Ever"}
+]
+
+for doctor in fake_doctors:
+    response = requests.post(f"{BASE_URL}/doctor/register", json=doctor)
+    
+    if response.status_code == 200:
+        print(f"Success! {doctor['username']} registered.")
+        print(f"Link: {response.json().get('booking_link')}\n")
+    else:
+        print(f"Failed to register {doctor['username']}: {response.text}\n")
+import os 
+import zoneinfo
+from datetime import datetime, timedelta
+from fastapi import FastAPI, HTTPException, Depends, APIRouter
+from sqlalchemy.orm import Session
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build 
+from google.oauth2.credentials import Credentials
+
+import database as db
+from database import get_db
+
+router = APIRouter()
+
+GOOGLE_REDIRECT_URI = "https://inddigmedical-production.up.railway.app/auth/google/callback"
+
+def get_google_flow():
+    return Flow.from_client_config(
+        client_config={
+            "web": {
+                "client_id": os.getenv("CLIENT_ID"),
+                "client_secret": os.getenv("CLIENT_SECRET"),
+                "auth_uri": "https://acounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes = ['https://www.googleapis.com/auth/calendar.events'],
+        redirect_uri = GOOGLE_REDIRECT_URI
+    )
+    
+@router.get("/auth/google/login")
+async def google_login(username: str):
+    flow = get_google_flow()
+    authorization_url, state = flow.authorization_url(
+        access_type = 'offline',
+        prompt = 'consent',
+        include_granted_scopes = 'true',
+        state = username 
+    )
+    return {"auth_uri": authorization_url}
+
+@router.get("/auth/google/callback")
+async def google_callback(state: str, code: str, session: Session = Depends(get_db)):
+    flow = get_google_flow()
+    flow.fetch_token(code=code)
+    credentials = flow.credentials
+    
+    refresh_token = credentials.refresh_token
+    if not refresh_token:
+        return{"message": "Already connected to google. Please close this window."}
+    
+    doctor = session.query(db.Doctor).filter(db.Doctor.username == state).first()
+    if not doctor:
+        raise HTTPException(status_code = 404, detail = "Doctor not found.")
+    doctor.google_refresh_token = refresh_token 
+    session.commit()
+    return{"message": " google calendar4 vconnected successfully! You can close this window."}
+
+# calendar helper functions
+def get_calendar_service(refresh_token: str):
+    creds = Credentials(
+        token = None, 
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=os.getenv("CLIENT_ID"),
+        client_secret=os.getenv("CLIENT_SECRET")
+    )
+    return build("calendar","v3",Credentials=creds)
+
+def add_to_calendar(name, email, doctor_email, booking_date, slot_time, custom_message, user_timezone="UTC"):
+    service = get_service_calendar(doctor_refresh_token)
+
+    # 1. Setup timezones using modern zoneinfo
+    try:
+        patient_tz = zoneinfo.ZoneInfo(user_timezone)
+    except Exception:
+        patient_tz = zoneinfo.ZoneInfo("UTC")
+
+    # 2. Combine DB date/time into a localized datetime
+    local_start = datetime.combine(booking_date, slot_time).replace(tzinfo=patient_tz)
+    local_end = local_start + timedelta(minutes=30)
+
+    attendees_list = []
+    if email:
+        attendees_list.append({'email': email})
+    if doctor_email:
+        attendees_list.append({'email': doctor_email})
+    # 3. Format the event body
+    time_str = local_start.strftime('%I:%M %p')
+    event = {
+        'summary': f'Dental Appointment: {name}',
+        'description': f'{custom_message}\n\nNote: This is {time_str} in your time ({user_timezone})',
+        'start': {'dateTime': local_start.isoformat(), 'timeZone': user_timezone},
+        'end': {'dateTime': local_end.isoformat(), 'timeZone': user_timezone},
+        'attendees': attendees_list,
+    }
+
+    # 4. Execute the insert
+    try:
+        created_event = service.events().insert(calendarId='primary', body=event, sendUpdates='all').execute()
+        return created_event.get("htmlLink"), created_event.get("id")  # Return both the link and the event ID
+    except Exception as e:
+        print(f"Error creating calendar event: {e}")
+        raise
+
+
+def delete_from_calendar_api(event_id: str):
+    service = get_service_calendar(doctor_refresh_token)
+    try:
+        # sendUpdates='all' sends a cancellation email to the patient automatically
+        service.events().delete(calendarId='primary', eventId=event_id, sendUpdates='all').execute()
+    except Exception as e:
+        print(f"Warning: Could not delete event {event_id} from Google Calendar: {e}")
+    
 import os
 import zoneinfo
 from datetime import datetime, timedelta, date, time
@@ -470,3 +756,208 @@ async def delete_appointment(appointment_id: int,
 
 
     
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta
+import config
+import requests
+
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+
+def send_whatsapp_reminder(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
+    print("\n--- 🛠️ STARTING WHATSAPP BACKGROUND REMINDER DEBUG 🛠️ ---")
+    
+    url = config.AISENSY_API_URL
+    api_key = config.AISENSY_API_KEY_REMINDER
+    
+    # DEBUG 1: Check if environment variables are actually loaded
+    if not url:
+        print("🚨 CRITICAL ERROR: config.AISENSY_API_URL is missing! Check your Railway Variables or .env file.")
+        return # Stop execution so we don't crash
+        
+    if not api_key:
+        print("🚨 CRITICAL ERROR: config.AISENSY_API_KEY_REMINDER is missing! Check your Railway Variables or .env file.")
+        return
+
+    # DEBUG 2: Check phone number formatting
+    destination_phone = phone_number.replace("+", "").replace(" ", "").strip()
+    if len(destination_phone) == 10:
+        destination_phone = f"91{destination_phone}"
+        
+    print(f"👉 Target URL: {url}")
+    print(f"👉 Formatted Phone: {destination_phone}")
+    print(f"👉 Using API Key: {api_key[:10]}... (truncated for security)")
+
+    payload = {
+        "apiKey": api_key,
+        "campaignName": "appointment_reminder",    # Ensure this exactly matches AiSensy
+        "destination": destination_phone,          
+        "userName": client_name,
+        "templateParams": [
+            str(client_name), 
+            str(doctor_name), 
+            str(date), 
+            str(time)
+        ],
+        "source": "automated-reminder",
+        "media": {},
+        "buttons": [],
+        "carouselCards": [],
+        "location": {},
+        "attributes": {},
+        "paramsFallbackValue": {
+            "FirstName": "user"
+        }
+    }
+    
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        print(f"👉 Sending background reminder payload to AiSensy for {client_name}...")
+        # Added a 10-second timeout so the background thread doesn't hang forever
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        # DEBUG 3: Catch API rejections specifically
+        if response.status_code != 200:
+            print(f"🚨 AiSensy API REJECTED the reminder request!")
+            print(f"🚨 Status Code: {response.status_code}")
+            print(f"🚨 Exact Error Reason: {response.text}")
+        else:
+            print(f"✅ Background Reminder Sent Successfully to {client_name}! Response: {response.json()}")
+               
+    # Catch internet/network issues
+    except requests.exceptions.RequestException as req_err:
+        print(f"🚨 Network Error (Could not reach AiSensy for reminder): {req_err}")
+    # Catch python coding errors
+    except Exception as e:
+        print(f"🚨 General Python Error in background reminder: {e}")
+
+    print("--- 🛠️ END WHATSAPP BACKGROUND REMINDER DEBUG 🛠️ ---\n")
+    
+    
+
+# 2. Changed signature to accept the full 'apt' object, not just the ID
+def schedule_reminder(apt, doctor_name: str):
+    appointment_time = datetime.combine(apt.booking_date, apt.slot_time)
+    
+    # Schedule for 3 hours before the appointment
+    run_time = appointment_time - timedelta(hours=3)
+    
+    # Only schedule if the run_time is in the future
+    if run_time > datetime.now():
+        scheduler.add_job(
+            func=send_whatsapp_reminder,
+            trigger='date',
+            run_date=run_time,
+            args=[
+                apt.whatsapp_no,
+                doctor_name,
+                apt.client_name,
+                apt.booking_date.strftime("%d %b %Y"),
+                apt.slot_time.strftime("%I:%M %p")
+            ],
+            id=f"reminder_{apt.id}",
+            replace_existing=True # Prevents errors if doctor reschedules an existing appt
+        )
+        print(f"📅 Reminder scheduled for {apt.client_name} at {run_time}")
+    else:
+        print(f"⚠️ Appointment for {apt.client_name} is too soon (under 3 hours). No reminder scheduled.")
+import requests
+import config
+
+# Put your actual AiSensy API key here
+API_KEY=config.AISENSY_API_KEY_WP
+
+# Put your own phone number here (Must start with 91 and have no spaces/pluses)
+TEST_PHONE = "919601041161" 
+
+def test_whatsapp():
+    url = config.AISENSY_API_URL # Verify this URL in AiSensy docs
+    
+    payload = {
+        "apiKey": API_KEY,
+        "campaignName": "appotment_approvement",
+        "destination": TEST_PHONE,
+        "userName": "Test Patient",
+        "templateParams": [
+            "Test Patient",  # {{1}}
+            "Dr. Smith",     # {{2}}
+            "25 March 2026", # {{3}}
+            "10:00 AM"       # {{4}}
+        ],
+        "source": "backend-test",
+        "media": {},
+        "buttons": [],
+        "carouselCards": [],
+        "location": {},
+        "attributes": {},
+        "paramsFallbackValue": {"FirstName": "user"}
+    }
+
+    print("Sending request to AiSensy...")
+    response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+    
+    print(f"Status Code: {response.status_code}")
+    print(f"Response Body: {response.text}")
+
+if __name__ == "__main__":
+    test_whatsapp()
+import requests
+import config
+
+# def send_whatsapp_reminder(phone_number: str, doctor_name: str, client_name: str, date: str, time: str):
+def send_whatsapp_reminder():
+    url = config.AISENSY_API_URL
+    
+    # 1. Format the phone number (Crucial for AiSensy)
+    destination_phone=919601041161
+    # destination_phone = phone_number.replace("+", "").replace(" ", "").strip()
+    # if len(destination_phone) == 10:
+    #     destination_phone = f"91{destination_phone}"
+        
+
+    payload = {
+        "apiKey": config.AISENSY_API_KEY_REMINDER, # Capital 'K' here!
+        "campaignName": "appointment_reminder",    # Ensure this exactly matches AiSensy
+        "destination": destination_phone,          # Use the formatted number
+        "userName": "Test Patient",
+        "templateParams": [
+            "Test Patient",  # {{1}}
+            "Dr. Smith",     # {{2}}
+            "25 March 2026", # {{3}}
+            "10:00 AM"  
+            # str(client_name), 
+            # str(doctor_name), 
+            # str(date), 
+            # str(time)
+        ],
+        "source": "automated-reminder",
+        "media": {},
+        "buttons": [],
+        "carouselCards": [],
+        "location": {},
+        "attributes": {},
+        "paramsFallbackValue": {
+            "FirstName": "user"
+        }
+    }
+    
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        
+        # Log exactly what happens in the background so we aren't blind
+        if response.status_code != 200:
+            print(f"🚨 Background Reminder Failed for {client_name}: {response.json()}")
+        else:
+            print(f"✅ Background Reminder Sent to {client_name}!")
+            
+    except Exception as e:
+        # Background jobs cannot raise exceptions to the user, so we log it
+        print(f"🚨 Network error sending reminder: {e}")
+        
+        
+if __name__ == "__main__":
+    send_whatsapp_reminder()
