@@ -1,8 +1,8 @@
-from fastapi.responses import RedirectResponse 
 import os
 import zoneinfo
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build 
@@ -29,7 +29,6 @@ def get_google_flow():
         redirect_uri=GOOGLE_REDIRECT_URI
     )
     
-
 @router.get("/auth/google/login")
 async def google_login(username: str):
     flow = get_google_flow()
@@ -39,28 +38,84 @@ async def google_login(username: str):
         include_granted_scopes='true',
         state=username 
     )
-    # This must be returned ALONE, not inside a dictionary
-    return RedirectResponse(url=authorization_url)
+    
+    response = RedirectResponse(url=authorization_url)
+    
+    # --- NEW: Save the PKCE secret in a temporary 5-minute cookie ---
+    if hasattr(flow, 'code_verifier') and flow.code_verifier:
+        response.set_cookie(
+            key="pkce_verifier", 
+            value=flow.code_verifier, 
+            httponly=True, 
+            max_age=300, 
+            secure=True, 
+            samesite="lax"
+        )
+        
+    return response
 
 @router.get("/auth/google/callback")
-async def google_callback(state: str, code: str, session: Session = Depends(get_db)):
+async def google_callback(request: Request, state: str, code: str, session: Session = Depends(get_db)):
     flow = get_google_flow()
-    flow.fetch_token(code=code)
-    credentials = flow.credentials
     
+    # --- NEW: Retrieve the secret from the cookie so Google trusts us ---
+    pkce_verifier = request.cookies.get("pkce_verifier")
+    if pkce_verifier:
+        flow.code_verifier = pkce_verifier
+
+    try:
+        flow.fetch_token(code=code)
+    except Exception as e:
+        print(f"Token Error: {e}")
+        return HTMLResponse("""
+            <html><body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h2 style="color:red;">Connection Error</h2>
+            <p>Failed to verify with Google. Please go back and try again.</p>
+            <button onclick="window.history.go(-2)" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">Go Back</button>
+            </body></html>
+        """)
+
+    credentials = flow.credentials
     refresh_token = credentials.refresh_token
+    
     if not refresh_token:
-        # If testing, you might need to revoke access in Google Account to see this again
-        return {"message": "Connected, but no new refresh token issued. Revoke access and try again if needed."}
+        return HTMLResponse("""
+            <html><body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h2>Connected, but no new token received.</h2>
+            <p>To generate a new one, go to your Google Account Settings > Third-party apps, remove access, and try again.</p>
+            <button onclick="window.history.go(-2)" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">Return to Dashboard</button>
+            </body></html>
+        """)
     
     doctor = session.query(db.Doctor).filter(db.Doctor.username == state).first()
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found.")
+        return HTMLResponse(f"""
+            <html><body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h2 style="color:red;">Error: Doctor Not Found</h2>
+            <p>Could not find your account.</p>
+            <button onclick="window.history.go(-2)" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">Return to Dashboard</button>
+            </body></html>
+        """)
     
     doctor.google_refresh_token = refresh_token 
     session.commit()
-    return {"message": "Google Calendar connected successfully! You can close this window."}
+    
+    # --- NEW: Beautiful Success Page ---
+    return HTMLResponse("""
+        <html>
+        <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h1 style="color: #16a34a;">✅ Calendar Connected!</h1>
+            <p>Your Google Calendar has been successfully linked.</p>
+            <p>Click below to return to your Medical Portal.</p>
+            <br/>
+            <button onclick="window.history.go(-2)" style="padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                Return to Dashboard
+            </button>
+        </body>
+        </html>
+    """)
 
+# --- Helper Functions ---
 def get_calendar_service(refresh_token: str):
     creds = Credentials(
         token=None, 
