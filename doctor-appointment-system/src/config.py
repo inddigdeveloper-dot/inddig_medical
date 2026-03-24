@@ -9,6 +9,7 @@ load_dotenv()
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://inddigdeveloper-dot.github.io"
+    "https://app.makeappointments.in"
 ]
 
 # 2. Frontend Base URLs
